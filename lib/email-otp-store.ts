@@ -25,7 +25,15 @@ function normalizeEmail(email: string) {
 }
 
 function getOtpSecret() {
-  return process.env.OTP_SECRET ?? process.env.FIREBASE_PRIVATE_KEY ?? process.env.SMTP_PASS ?? "";
+  const raw =
+    process.env.OTP_SECRET ??
+    process.env.FIREBASE_PRIVATE_KEY ??
+    process.env.SMTP_PASS ??
+    "";
+  // FIREBASE_PRIVATE_KEY in .env files often stores \n as a literal
+  // backslash-n instead of a real newline, making the secret inconsistent
+  // between invocations depending on how the env is loaded.
+  return raw.replace(/\\n/g, "\n");
 }
 
 function ensureOtpSecret() {
@@ -90,11 +98,12 @@ export function verifyEmailOtp(
     return { ok: false, message: "OTP session is missing. Please request a new OTP." };
   }
 
-  const [payloadBase64, signature] = challengeToken.split(".");
-
-  if (!payloadBase64 || !signature) {
+  const dotIndex = challengeToken.indexOf(".");
+  if (dotIndex === -1) {
     return { ok: false, message: "OTP session is invalid. Please request a new OTP." };
   }
+  const payloadBase64 = challengeToken.slice(0, dotIndex);
+  const signature = challengeToken.slice(dotIndex + 1);
 
   const expectedSignature = signPayload(payloadBase64);
   const providedBuffer = Buffer.from(signature, "utf8");

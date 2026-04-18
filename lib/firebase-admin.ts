@@ -13,9 +13,28 @@ function getRequiredAdminEnv(name: string) {
   return value;
 }
 
+function normalizePrivateKey(value: string) {
+  let normalized = value.trim();
+
+  if (normalized.endsWith(",")) {
+    normalized = normalized.slice(0, -1).trimEnd();
+  }
+
+  if (
+    (normalized.startsWith("\"") && normalized.endsWith("\"")) ||
+    (normalized.startsWith("'") && normalized.endsWith("'"))
+  ) {
+    normalized = normalized.slice(1, -1);
+  }
+
+  return normalized.replace(/\\n/g, "\n");
+}
+
 const projectId = getRequiredAdminEnv("FIREBASE_PROJECT_ID");
 const clientEmail = getRequiredAdminEnv("FIREBASE_CLIENT_EMAIL");
-const privateKey = getRequiredAdminEnv("FIREBASE_PRIVATE_KEY").replace(/\\n/g, "\n");
+const privateKey = normalizePrivateKey(
+  getRequiredAdminEnv("FIREBASE_PRIVATE_KEY"),
+);
 
 const adminApp = getApps().length
   ? getApp()

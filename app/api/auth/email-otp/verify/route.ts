@@ -97,6 +97,7 @@ export async function POST(request: Request) {
       customToken,
     });
   } catch (error) {
+    // console.error("VERIFY ERROR:", error);
     const details = mapFirebaseAdminError(error);
 
     return NextResponse.json(
