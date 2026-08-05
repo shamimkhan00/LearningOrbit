@@ -1,0 +1,58 @@
+<svg viewBox="-30 -30 460 460" className="w-full max-w-[70vh] h-auto ">
+              {habits.map((h, i) => {
+                const rInner = r0 + i * ringW;
+                const rOuter = rInner + ringW;
+                return Array.from({ length: totalDays }, (_, idx) => {
+                  const day = idx + 1;
+                  const startAngle = idx * segAngle;
+                  const endAngle = startAngle + segAngle;
+                  const status = monthEntries[day]?.[h.id];
+                  const fill = status === 'done' ? DONE : status === 'missed' ? MISSED : EMPTY;
+                  const future = isCurrentMonth && day > now.getDate();
+                  return (
+                    <path
+                      key={`${h.id}-${day}`}
+                      d={ringSegmentPath(cx, cy, rInner, rOuter, startAngle, endAngle)}
+                      fill={future ? '#F5F3EC' : fill}
+                      stroke={EMPTY_STROKE}
+                      strokeWidth={1}
+                      opacity={future ? 0.6 : status ? 0.92 : 1}
+                      // onClick={() => !future && cycleStatus(day, h.id)}
+                      style={{ cursor: future ? 'default' : 'pointer' }}
+                    />
+                  );
+                });
+              })}
+              {/* day labels */}
+              {Array.from({ length: totalDays }, (_, idx) => {
+                const day = idx + 1;
+                const mid = idx * segAngle + segAngle / 2;
+                const pos = polarToCartesian(cx, cy, maxR + 14, mid);
+                const flip = mid > 90 && mid < 270;
+                return (
+                  <text
+                    key={`lbl-${day}`}
+                    x={pos.x}
+                    y={pos.y}
+                    fontSize="9"
+                    fill={day === selectedDay ? '#B3541E' : '#8A8577'}
+                    fontWeight={day === selectedDay ? 700 : 400}
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                    transform={`rotate(${flip ? mid + 180 : mid}, ${pos.x}, ${pos.y})`}
+                    style={{ cursor: 'pointer', fontFamily: 'Inter, sans-serif' }}
+                    onClick={() => setSelectedDay(day)}
+                  >
+                    {day}
+                  </text>
+                );
+              })}
+              {/* center hub */}
+              <circle cx={cx} cy={cy} r={r0 - 4} fill="#FAF9F6" stroke="#E8E4DA" strokeWidth={1} />
+              <text x={cx} y={cy - 8} textAnchor="middle" fontSize="22" fontWeight="700" fill="#1F2937" fontFamily="Space Grotesk, sans-serif">
+                {overallPct}%
+              </text>
+              <text x={cx} y={cy + 12} textAnchor="middle" fontSize="9" fill="#8A8577" fontFamily="Inter, sans-serif">
+                this month
+              </text>
+            </svg>

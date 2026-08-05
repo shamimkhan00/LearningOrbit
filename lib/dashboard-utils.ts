@@ -1,0 +1,487 @@
+import { RoadmapSubject, RoadmapTopic } from "@/types/roadmap";
+
+export interface StudySession {
+  id: string;
+  userId: string;
+  topicId: string;
+  startTime: Date;
+  endTime: Date;
+  duration: number;
+  completed: boolean;
+}
+
+export interface DashboardResumeTopic {
+  subject: string;
+  topic: string;
+  chapter: string;
+  estimatedMinutes: number;
+}
+
+function toDateValue(value: unknown) {
+  if (value instanceof Date) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  if (value && typeof value === "object" && "toDate" in value) {
+    const maybeDate = value as { toDate?: () => Date };
+    if (typeof maybeDate.toDate === "function") {
+      const parsed = maybeDate.toDate();
+      return parsed instanceof Date ? parsed : null;
+    }
+  }
+
+  return null;
+}
+
+function getDayStart(date: Date) {
+  const day = new Date(date);
+  day.setHours(0, 0, 0, 0);
+  return day;
+}
+
+function getDayEnd(date: Date) {
+  const day = new Date(date);
+  day.setHours(23, 59, 59, 999);
+  return day;
+}
+
+export function calculateOverallProgress(topics: RoadmapTopic[]) {
+  const totalTopics = topics.length;
+  const completedTopics = topics.filter((topic) => topic.completed).length;
+
+  const progress = totalTopics === 0 ? 0 : Math.round((completedTopics / totalTopics) * 100);
+
+  return {
+    totalTopics,
+    completedTopics,
+    progress,
+  };
+}
+
+export function calculateTodayStudied(studySessions: StudySession[]) {
+  const today = new Date();
+  const start = getDayStart(today);
+  const end = getDayEnd(today);
+
+  const totalMinutes = studySessions
+    .filter((session) => session.completed && session.endTime >= start && session.endTime <= end)
+    .reduce((sum, session) => sum + (session.duration ?? 0), 0);
+
+  return Math.round((totalMinutes / 60) * 10) / 10;
+}
+
+export function calculateStreak(studySessions: StudySession[]): number {
+  if (!studySessions.length) {
+    return 0;
+  }
+
+  const uniqueDates = [
+    ...new Set(
+      studySessions
+        .filter((session) => session.completed)
+        .map((session) => {
+          const date = getDayStart(new Date(session.endTime));
+          return date.getTime();
+        })
+    ),
+  ].sort((a, b) => b - a);
+
+  if (!uniqueDates.length) {
+    return 0;
+  }
+
+  const today = getDayStart(new Date());
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+
+  if (uniqueDates[0] !== today.getTime() && uniqueDates[0] !== yesterday.getTime()) {
+    return 0;
+  }
+
+  let expected = uniqueDates[0] === today.getTime() ? today.getTime() : yesterday.getTime();
+  let streak = 0;
+
+  for (const date of uniqueDates) {
+    if (date === expected) {
+      streak += 1;
+      expected -= 24 * 60 * 60 * 1000;
+    } else {
+      break;
+    }
+  }
+
+  return streak;
+}
+
+export function calculateSubjectProgress(subjects: RoadmapSubject[], topics: RoadmapTopic[]) {
+  return subjects.map((subject) => {
+    const subjectTopics = topics.filter((topic) => topic.subject === subject.name);
+    const completed = subjectTopics.filter((topic) => topic.completed).length;
+    const total = subjectTopics.length;
+    const progress = total === 0 ? 0 : Math.round((completed / total) * 100);
+
+    return {
+      id: subject.id,
+      name: subject.name,
+      progress,
+      completed,
+      total,
+      remaining: total - completed,
+    };
+  });
+}
+
+export function getExamDaysLeft(examDate: unknown) {
+  const parsedDate = toDateValue(examDate);
+
+  if (!parsedDate) {
+    return 0;
+  }
+
+  const today = getDayStart(new Date());
+  const target = getDayStart(parsedDate);
+  const diffMs = target.getTime() - today.getTime();
+  const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+
+  return diffDays > 0 ? diffDays : 0;
+}
+
+export function calculateXP(
+  topics: RoadmapTopic[],
+  studySessions: StudySession[],
+  dailyStudyHours: number,
+  streak: number,
+  todayStudied: number
+) {
+  const completedTopics = topics.filter((topic) => topic.completed).length;
+  const completedSessions = studySessions.filter((session) => session.completed).length;
+  const dailyGoalComplete = todayStudied >= dailyStudyHours ? 100 : 0;
+
+  const streakBonus =
+    streak >= 30 ? 250 :
+    streak >= 14 ? 150 :
+    streak >= 7 ? 100 :
+    streak >= 3 ? 50 : 0;
+
+  return completedTopics * 50 + completedSessions * 20 + dailyGoalComplete + streakBonus;
+}
+
+export function calculateLevel(xp: number) {
+  const xpPerLevel = 100;
+  return 1 + Math.floor(xp / xpPerLevel);
+}
+
+export function calculateXpProgress(xp: number) {
+  const xpPerLevel = 100;
+  const level = calculateLevel(xp);
+  const xpCurrent = xp % xpPerLevel;
+  const xpNext = xpPerLevel;
+
+  return { level, xpCurrent, xpNext };
+}
+
+export function calculateAheadDays(
+  topics: RoadmapTopic[],
+  dailyStudyHours: number,
+  examDate: unknown
+) {
+  const remainingTopics = topics.filter((topic) => !topic.completed);
+  const totalMinutes = remainingTopics.reduce((sum, topic) => {
+    const minutesByDifficulty = {
+      easy: 30,
+      medium: 45,
+      hard: 60,
+    } as const;
+
+    return sum + minutesByDifficulty[topic.difficulty];
+  }, 0);
+
+  if (!remainingTopics.length || dailyStudyHours <= 0) {
+    return 0;
+  }
+
+  const estimatedDays = totalMinutes / 60 / dailyStudyHours;
+  const estimatedCompletionDate = new Date();
+  estimatedCompletionDate.setDate(estimatedCompletionDate.getDate() + Math.ceil(estimatedDays));
+
+  const parsedExamDate = toDateValue(examDate);
+  if (!parsedExamDate) {
+    return 0;
+  }
+
+  const diffMs = parsedExamDate.getTime() - estimatedCompletionDate.getTime();
+  return Math.round(diffMs / (1000 * 60 * 60 * 24));
+}
+
+export function calculateWeeklyMomentum(studySessions: StudySession[], dailyStudyHours: number) {
+  const now = new Date();
+  const start = new Date(now);
+  start.setDate(now.getDate() - 6);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(now);
+  end.setHours(23, 59, 59, 999);
+
+  const weeklyMinutes = studySessions
+    .filter((session) => session.completed && session.endTime >= start && session.endTime <= end)
+    .reduce((sum, session) => sum + (session.duration ?? 0), 0);
+
+  const weeklyGoalMinutes = dailyStudyHours * 7 * 60;
+  return weeklyGoalMinutes <= 0 ? 0 : Math.round((weeklyMinutes / weeklyGoalMinutes) * 100);
+}
+
+export function calculateAverageSessionDuration(studySessions: StudySession[]) {
+  const completedSessions = studySessions.filter((session) => session.completed);
+  if (!completedSessions.length) {
+    return 0;
+  }
+
+  const totalMinutes = completedSessions.reduce((sum, session) => sum + (session.duration ?? 0), 0);
+  return Math.round(totalMinutes / completedSessions.length);
+}
+
+export function calculatePerformanceScore(
+  topics: RoadmapTopic[],
+  studySessions: StudySession[],
+  dailyStudyHours: number,
+  streak: number,
+  todayStudied: number
+) {
+  const completedTopics = topics.filter((topic) => topic.completed).length;
+  const totalTopics = topics.length;
+  const completedSessions = studySessions.filter((session) => session.completed).length;
+
+  const consistencyScore = Math.min(100, Math.round(streak * 12));
+  const goalScore = dailyStudyHours <= 0 ? 0 : Math.min(100, Math.round((todayStudied / dailyStudyHours) * 100));
+  const completionScore = totalTopics === 0 ? 100 : Math.round((completedTopics / totalTopics) * 100);
+  const revisionScore = Math.min(100, Math.round((completedSessions / Math.max(1, Math.ceil(totalTopics / 3))) * 100));
+
+  return Math.round(consistencyScore * 0.3 + goalScore * 0.3 + completionScore * 0.25 + revisionScore * 0.15);
+}
+
+export function calculatePerformanceDelta(
+  topics: RoadmapTopic[],
+  studySessions: StudySession[],
+  dailyStudyHours: number,
+  todayStudied: number,
+  streak: number
+) {
+  const currentScore = calculatePerformanceScore(topics, studySessions, dailyStudyHours, streak, todayStudied);
+
+  const previousWindowEnd = new Date();
+  const previousWindowStart = new Date(previousWindowEnd);
+  previousWindowStart.setDate(previousWindowEnd.getDate() - 14);
+  previousWindowEnd.setDate(previousWindowEnd.getDate() - 7);
+
+  const previousSessions = studySessions.filter((session) => {
+    const sessionDate = new Date(session.endTime);
+    return session.completed && sessionDate >= previousWindowStart && sessionDate < previousWindowEnd;
+  });
+
+  const previousStreak = calculateStreak(previousSessions);
+  const previousScore = calculatePerformanceScore(topics, previousSessions, dailyStudyHours, previousStreak, calculateTodayStudied(previousSessions));
+
+  return currentScore - previousScore;
+}
+
+const ESTIMATED_MINUTES_BY_DIFFICULTY: Record<RoadmapTopic["difficulty"], number> = {
+  easy: 30,
+  medium: 45,
+  hard: 60,
+};
+
+const DIFFICULTY_SCORE: Record<RoadmapTopic["difficulty"], number> = {
+  easy: 1,
+  medium: 2,
+  hard: 3,
+};
+
+const WEIGHTAGE_SCORE: Record<RoadmapTopic["weightage"], number> = {
+  low: 1,
+  medium: 2,
+  high: 3,
+};
+
+export interface TodaysPlanItem {
+  id: string;
+  subject: string;
+  chapter: string;
+  topic: string;
+  difficulty: RoadmapTopic["difficulty"];
+  weightage: RoadmapTopic["weightage"];
+  estimatedMinutes: number;
+  priority: number;
+}
+
+type SubjectMetrics = {
+  totalTopics: number;
+  remainingTopics: number;
+  subjectBalanceScore: number;
+};
+
+function getSubjectBalanceScore(remainingPercentage: number) {
+  if (remainingPercentage <= 0.25) {
+    return 0;
+  }
+
+  if (remainingPercentage <= 0.5) {
+    return 1;
+  }
+
+  if (remainingPercentage <= 0.75) {
+    return 2;
+  }
+
+  return 3;
+}
+
+function normalizeRemainingScores(subjectMetrics: Map<string, SubjectMetrics>) {
+  const remainingCounts = Array.from(subjectMetrics.values()).map((metrics) => metrics.remainingTopics);
+  const minRemaining = Math.min(...remainingCounts);
+  const maxRemaining = Math.max(...remainingCounts);
+  const remainingScores = new Map<string, number>();
+
+  for (const [subjectName, metrics] of subjectMetrics.entries()) {
+    if (maxRemaining === minRemaining) {
+      remainingScores.set(subjectName, 0);
+      continue;
+    }
+
+    const normalizedScore = Math.round(
+      ((metrics.remainingTopics - minRemaining) / (maxRemaining - minRemaining)) * 2
+    );
+
+    remainingScores.set(subjectName, normalizedScore);
+  }
+
+  return remainingScores;
+}
+
+function buildSubjectMetrics(topics: RoadmapTopic[], subjects: RoadmapSubject[]) {
+  const subjectNames = new Set<string>([
+    ...subjects.map((subject) => subject.name),
+    ...topics.map((topic) => topic.subject),
+  ]);
+
+  const metrics = new Map<string, SubjectMetrics>();
+
+  for (const subjectName of subjectNames) {
+    const subjectTopics = topics.filter((topic) => topic.subject === subjectName);
+    const totalTopics = subjectTopics.length;
+    const remainingTopics = subjectTopics.filter((topic) => !topic.completed).length;
+    const remainingPercentage = totalTopics === 0 ? 0 : remainingTopics / totalTopics;
+
+    metrics.set(subjectName, {
+      totalTopics,
+      remainingTopics,
+      subjectBalanceScore: getSubjectBalanceScore(remainingPercentage),
+    });
+  }
+
+  return metrics;
+}
+
+export function getResumeTopic(todaysPlan: TodaysPlanItem[] | null | undefined): DashboardResumeTopic | null {
+  const firstItem = todaysPlan?.[0];
+  if (!firstItem) {
+    return null;
+  }
+
+  return {
+    subject: firstItem.subject,
+    topic: firstItem.topic,
+    chapter: firstItem.chapter,
+    estimatedMinutes: firstItem.estimatedMinutes,
+  };
+}
+
+export function generateTodaysPlan(topics: RoadmapTopic[], subjects: RoadmapSubject[], dailyStudyHours: number) {
+  const incompleteTopics = topics.filter((topic) => !topic.completed);
+
+  if (incompleteTopics.length === 0 || dailyStudyHours <= 0) {
+    return [] as TodaysPlanItem[];
+  }
+
+  const subjectMetrics = buildSubjectMetrics(topics, subjects);
+  const remainingScores = normalizeRemainingScores(subjectMetrics);
+
+  const prioritizedTopics = incompleteTopics
+    .map((topic) => {
+      const subjectScore = subjectMetrics.get(topic.subject)?.subjectBalanceScore ?? 0;
+      const remainingScore = remainingScores.get(topic.subject) ?? 0;
+      const difficultyScore = DIFFICULTY_SCORE[topic.difficulty];
+      const weightageScore = WEIGHTAGE_SCORE[topic.weightage];
+      const revisionScore = 0;
+      const estimatedMinutes = ESTIMATED_MINUTES_BY_DIFFICULTY[topic.difficulty];
+      const priority = difficultyScore + weightageScore + subjectScore + remainingScore + revisionScore;
+
+      return {
+        id: topic.id,
+        subject: topic.subject,
+        chapter: topic.chapter,
+        topic: topic.topic,
+        difficulty: topic.difficulty,
+        weightage: topic.weightage,
+        estimatedMinutes,
+        priority,
+        difficultyScore,
+        weightageScore,
+        subjectScore,
+        remainingScore,
+      };
+    })
+    .sort((left, right) => {
+      if (right.priority !== left.priority) {
+        return right.priority - left.priority;
+      }
+
+      if (right.weightageScore !== left.weightageScore) {
+        return right.weightageScore - left.weightageScore;
+      }
+
+      if (right.difficultyScore !== left.difficultyScore) {
+        return right.difficultyScore - left.difficultyScore;
+      }
+
+      if (right.remainingScore !== left.remainingScore) {
+        return right.remainingScore - left.remainingScore;
+      }
+
+      if (right.subjectScore !== left.subjectScore) {
+        return right.subjectScore - left.subjectScore;
+      }
+
+      if (left.estimatedMinutes !== right.estimatedMinutes) {
+        return left.estimatedMinutes - right.estimatedMinutes;
+      }
+
+      return left.id.localeCompare(right.id);
+    });
+
+  let remainingMinutes = Math.floor(dailyStudyHours * 60);
+  const todaysPlan: TodaysPlanItem[] = [];
+
+  for (const topic of prioritizedTopics) {
+    if (remainingMinutes < topic.estimatedMinutes) {
+      continue;
+    }
+
+    remainingMinutes -= topic.estimatedMinutes;
+    todaysPlan.push({
+      id: topic.id,
+      subject: topic.subject,
+      chapter: topic.chapter,
+      topic: topic.topic,
+      difficulty: topic.difficulty,
+      weightage: topic.weightage,
+      estimatedMinutes: topic.estimatedMinutes,
+      priority: topic.priority,
+    });
+  }
+
+  return todaysPlan;
+}

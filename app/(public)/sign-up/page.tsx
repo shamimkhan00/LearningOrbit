@@ -132,7 +132,7 @@ export default function Page() {
             onChange={(e) => setEmail(e.target.value)}
             value={email}
             placeholder="Email"
-            className="mb-4 rounded-md border border-gray-300 px-4 py-2 text-xl text-black"
+            className="mb-4 rounded-md border border-gray-300 px-4 py-2 text-xl text-white"
             required
             disabled={step === "otp"}
           />
@@ -141,7 +141,7 @@ export default function Page() {
             onChange={(e) => setPassword(e.target.value)}
             value={password}
             placeholder="Password"
-            className="mb-4 rounded-md border border-gray-300 px-4 py-2 text-xl text-black"
+            className="mb-4 rounded-md border border-gray-300 px-4 py-2 text-xl text-white"
             required
             disabled={step === "otp"}
             minLength={6}
@@ -155,7 +155,7 @@ export default function Page() {
               onChange={(e) => setOtp(e.target.value)}
               value={otp}
               placeholder="Enter 6-digit OTP"
-              className="mb-4 rounded-md border border-gray-300 px-4 py-2 text-xl text-black"
+              className="mb-4 rounded-md border border-gray-300 px-4 py-2 text-xl text-white"
               required
             />
           ) : null}
@@ -168,7 +168,7 @@ export default function Page() {
           ) : null}
 
           <button
-            className="rounded-md bg-yellow-500 px-4 py-2 font-bold text-black disabled:opacity-60"
+            className="rounded-md bg-yellow-500 px-4 py-2 font-bold text-white disabled:opacity-60"
             disabled={isSendingOtp || isVerifyingOtp}
             type="submit"
           >

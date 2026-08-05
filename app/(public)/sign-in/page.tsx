@@ -7,6 +7,21 @@ import { type FormEvent, useEffect, useState } from "react";
 import { useAuthUser } from "@/app/hooks/use-auth-user";
 import { auth } from "@/lib/firebase";
 
+function getFriendlyAuthErrorMessage(error: AuthError) {
+  switch (error.code) {
+    case "auth/invalid-credential":
+      return "Incorrect email or password.";
+    case "auth/invalid-email":
+      return "Please enter a valid email address.";
+    case "auth/user-disabled":
+      return "This account has been disabled.";
+    case "auth/too-many-requests":
+      return "Too many attempts. Please try again later.";
+    default:
+      return error.message || "Unable to sign in.";
+  }
+}
+
 export default function Page() {
   const router = useRouter();
   const { loading, user } = useAuthUser();
@@ -31,7 +46,7 @@ export default function Page() {
       router.replace("/");
     } catch (error) {
       const authError = error as AuthError;
-      setErrorMessage(authError.message || "Unable to sign in.");
+      setErrorMessage(getFriendlyAuthErrorMessage(authError));
     } finally {
       setIsSubmitting(false);
     }
