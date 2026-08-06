@@ -17,6 +17,29 @@ export interface DashboardResumeTopic {
   estimatedMinutes: number;
 }
 
+export interface DailyStudyAnalyticsPoint {
+  day: string;
+  hours: number;
+  topics: number;
+}
+
+export interface HeatmapPoint {
+  date: Date;
+  value: number;
+}
+
+export interface RecentActivityGroup {
+  label: string;
+  items: string[];
+}
+
+export interface UpcomingItem {
+  type: string;
+  title: string;
+  due: string;
+  color: string;
+}
+
 function toDateValue(value: unknown) {
   if (value instanceof Date) {
     return value;
@@ -61,6 +84,114 @@ export function calculateOverallProgress(topics: RoadmapTopic[]) {
     completedTopics,
     progress,
   };
+}
+
+export function getStudyAnalytics(studySessions: StudySession[], topics: RoadmapTopic[], days = 7): {
+  dailyStudyHours: DailyStudyAnalyticsPoint[];
+  weeklyCompletions: DailyStudyAnalyticsPoint[];
+} {
+  const now = new Date();
+  const dailyStudyHours: DailyStudyAnalyticsPoint[] = [];
+  const weeklyCompletions: DailyStudyAnalyticsPoint[] = [];
+
+  for (let index = days - 1; index >= 0; index -= 1) {
+    const date = new Date(now);
+    date.setDate(now.getDate() - index);
+    date.setHours(0, 0, 0, 0);
+
+    const nextDay = new Date(date);
+    nextDay.setHours(23, 59, 59, 999);
+
+    const dayLabel = date.toLocaleDateString("en", { weekday: "short" });
+
+    const minutes = studySessions
+      .filter((session) => session.completed && session.endTime >= date && session.endTime <= nextDay)
+      .reduce((sum, session) => sum + (session.duration ?? 0), 0);
+
+    const completedSessions = studySessions.filter((session) => session.completed && session.endTime >= date && session.endTime <= nextDay).length;
+    const completedTopics = topics.filter((topic) => topic.completed).length;
+
+    dailyStudyHours.push({
+      day: dayLabel,
+      hours: Number((minutes / 60).toFixed(1)),
+      topics: completedSessions,
+    });
+
+    weeklyCompletions.push({
+      day: dayLabel,
+      hours: completedSessions,
+      topics: completedSessions,
+    });
+  }
+
+  return {
+    dailyStudyHours,
+    weeklyCompletions: weeklyCompletions.map((point) => ({
+      ...point,
+      topics: Math.max(0, point.topics),
+    })),
+  };
+}
+
+export function getConsistencyHeatmap(studySessions: StudySession[], days = 28): HeatmapPoint[] {
+  const now = new Date();
+
+  return Array.from({ length: days }, (_, index) => {
+    const date = new Date(now);
+    date.setDate(now.getDate() - (days - 1 - index));
+    date.setHours(0, 0, 0, 0);
+
+    const nextDay = new Date(date);
+    nextDay.setHours(23, 59, 59, 999);
+
+    const minutes = studySessions
+      .filter((session) => session.completed && session.endTime >= date && session.endTime <= nextDay)
+      .reduce((sum, session) => sum + (session.duration ?? 0), 0);
+
+    const value = minutes <= 0 ? 0 : minutes <= 30 ? 1 : minutes <= 60 ? 2 : minutes <= 120 ? 3 : 4;
+
+    return { date, value };
+  });
+}
+
+export function getRecentActivity(studySessions: StudySession[], topics: RoadmapTopic[]): RecentActivityGroup[] {
+  const recentSessions = studySessions
+    .filter((session) => session.completed)
+    .sort((left, right) => new Date(right.endTime).getTime() - new Date(left.endTime).getTime())
+    .slice(0, 4);
+
+  if (!recentSessions.length) {
+    return [];
+  }
+
+  const grouped = new Map<string, string[]>();
+  const now = new Date();
+
+  recentSessions.forEach((session) => {
+    const sessionDate = new Date(session.endTime);
+    const isToday = sessionDate.toDateString() === now.toDateString();
+    const yesterday = new Date(now);
+    yesterday.setDate(now.getDate() - 1);
+    const isYesterday = sessionDate.toDateString() === yesterday.toDateString();
+    const label = isToday ? "Today" : isYesterday ? "Yesterday" : "Earlier";
+    const topic = topics.find((item) => item.id === session.topicId)?.topic ?? "Study topic";
+    const itemText = `${topic} — ${Math.max(1, Math.round((session.duration ?? 0) / 60))} min`;
+
+    const items = grouped.get(label) ?? [];
+    items.push(itemText);
+    grouped.set(label, items);
+  });
+
+  return Array.from(grouped.entries()).map(([label, items]) => ({ label, items }));
+}
+
+export function getUpcomingItems(todaysPlan: TodaysPlanItem[]) {
+  return todaysPlan.slice(0, 3).map((item, index) => ({
+    type: index === 0 ? "Priority" : index === 1 ? "Focus" : "Revision",
+    title: item.topic,
+    due: index === 0 ? "Today" : index === 1 ? "Tomorrow" : "This week",
+    color: index === 0 ? "#6366F1" : index === 1 ? "#8B5CF6" : "#A78BFA",
+  }));
 }
 
 export function calculateTodayStudied(studySessions: StudySession[]) {
@@ -164,9 +295,9 @@ export function calculateXP(
 
   const streakBonus =
     streak >= 30 ? 250 :
-    streak >= 14 ? 150 :
-    streak >= 7 ? 100 :
-    streak >= 3 ? 50 : 0;
+      streak >= 14 ? 150 :
+        streak >= 7 ? 100 :
+          streak >= 3 ? 50 : 0;
 
   return completedTopics * 50 + completedSessions * 20 + dailyGoalComplete + streakBonus;
 }
@@ -484,4 +615,23 @@ export function generateTodaysPlan(topics: RoadmapTopic[], subjects: RoadmapSubj
   }
 
   return todaysPlan;
+}
+
+
+export function getGreeting(): string {
+  const hour = new Date().getHours();
+
+  if (hour >= 5 && hour < 12) {
+    return "Good morning 👋";
+  }
+
+  if (hour >= 12 && hour < 17) {
+    return "Good afternoon 👋";
+  }
+
+  if (hour >= 17 && hour < 21) {
+    return "Good evening 👋";
+  }
+
+  return "Good night 🌙";
 }

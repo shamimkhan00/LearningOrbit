@@ -6,7 +6,7 @@ import {
   XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell,
 } from "recharts";
-
+import { getGreeting } from "@/lib/dashboard-utils";
 import { useRoadmap } from "@/hooks/use-roadmap";
 import {
   generateTodaysPlan,
@@ -23,6 +23,10 @@ import {
   calculateAverageSessionDuration,
   getExamDaysLeft,
   getResumeTopic,
+  getStudyAnalytics,
+  getConsistencyHeatmap,
+  getRecentActivity,
+  getUpcomingItems,
 } from "@/lib/dashboard-utils";
 
 
@@ -149,19 +153,6 @@ export const MOTIVATIONS = [
 
 // ─── Mock Data ────────────────────────────────────────────────────────────────
 
-const STUDY_HOURS = [
-  { day: "Mon", hours: 2.5 }, { day: "Tue", hours: 3.2 },
-  { day: "Wed", hours: 1.8 }, { day: "Thu", hours: 4.1 },
-  { day: "Fri", hours: 3.5 }, { day: "Sat", hours: 4.8 },
-  { day: "Sun", hours: 2.1 },
-];
-
-const COMPLETION_DATA = [
-  { day: "Mon", topics: 4 }, { day: "Tue", topics: 7 },
-  { day: "Wed", topics: 3 }, { day: "Thu", topics: 9 },
-  { day: "Fri", topics: 6 },
-];
-
 const SUBJECT_COLORS = {
   Physics: "#6366F1",
   Chemistry: "#8B5CF6",
@@ -169,32 +160,12 @@ const SUBJECT_COLORS = {
   Biology: "#C4B5FD",
 };
 
-const RECENT_ACTIVITY = [
-  { label: "Today", items: ["Laws of Motion — 25 min", "Mole Concept — 48 min"] },
-  { label: "Yesterday", items: ["Vectors — 32 min", "Trigonometry — 40 min"] },
-];
-
-const UPCOMING = [
-  { type: "Revision", title: "Vectors", due: "Tomorrow", color: "#6366F1" },
-  { type: "Mock Test", title: "Full Syllabus", due: "Sunday", color: "#8B5CF6" },
-  { type: "Chapter Target", title: "Chemical Bonding", due: "2 days", color: "#A78BFA" },
-];
-
 const BADGES = [
   { icon: "🔥", label: "Streak" },
   { icon: "📚", label: "100 Topics" },
   { icon: "⚡", label: "Early Bird" },
   { icon: "🎯", label: "Goal Crusher" },
 ];
-
-const HEATMAP_DATA = (() => {
-  const days = [];
-  for (let i = 27; i >= 0; i--) {
-    const d = new Date(); d.setDate(d.getDate() - i);
-    days.push({ date: d, value: Math.random() > 0.2 ? Math.floor(Math.random() * 4) + 1 : 0 });
-  }
-  return days;
-})();
 
 const ANALYTICS_STATS = [
   { label: "Study streak" },
@@ -295,7 +266,7 @@ function Hero({ dashboard }) {
     <div style={{ padding: "20px 16px 0" }}>
       {/* Greeting */}
       <div style={{ marginBottom: 16 }}>
-        <p style={{ margin: 0, fontSize: 13, color: "#94A3B8" }}>Good afternoon 👋</p>
+        <p style={{ margin: 0, fontSize: 13, color: "#94A3B8" }}>{getGreeting()}</p>
         <h1 style={{ margin: "2px 0 4px", fontSize: 18, fontWeight: 700, color: "#F1F5F9" }}>{message}</h1>
         <p style={{ margin: 0, fontSize: 13, color: "#818CF8" }}>Push Past Your Limits</p>
       </div>
@@ -365,7 +336,9 @@ function Hero({ dashboard }) {
 
 function TodaysPlan() {
   const { subjects, topics, dailyStudyHours } = useRoadmap();
-
+  const [activeTopic, setActiveTopic] = useState(null);
+  const [studyMinutes, setStudyMinutes] = useState({});
+  const [startedAt, setStartedAt] = useState({});
   const todayPlan = generateTodaysPlan(
     topics,
     subjects,
@@ -378,36 +351,291 @@ function TodaysPlan() {
   return (
     <div style={S.section}>
       <SectionHead title="Today's plan" action="See all" />
+
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        {todayPlan.map((item, i) => {
+        {todayPlan.map((item) => {
           const dc = diffStyle(item.difficulty);
           const color = SUBJECT_COLORS[item.subject] ?? "#6366F1";
+
           return (
-            <div key={i} style={{ ...S.card, display: "flex", gap: 12, alignItems: "flex-start" }}>
-              <div style={{ width: 3, borderRadius: 99, background: color, alignSelf: "stretch", flexShrink: 0 }} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
-                  <span style={{ fontSize: 11, color: "#64748B" }}>{item.subject}</span>
-                  <span style={{ fontSize: 10, padding: "2px 7px", borderRadius: 99, color: dc.color, border: `1px solid ${dc.border}`, background: "#0F172A" }}>{item.difficulty}</span>
+            <div
+              key={item.id}
+              style={{
+                ...S.card,
+                transition: "all .25s ease",
+              }}
+            >
+              {/* Top Row */}
+              <div
+                style={{
+                  display: "flex",
+                  gap: 12,
+                  alignItems: "flex-start",
+                }}
+              >
+                <div
+                  style={{
+                    width: 3,
+                    borderRadius: 99,
+                    background: color,
+                    alignSelf: "stretch",
+                    flexShrink: 0,
+                  }}
+                />
+
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                      marginBottom: 4,
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontSize: 11,
+                        color: "#64748B",
+                      }}
+                    >
+                      {item.subject}
+                    </span>
+
+                    <span
+                      style={{
+                        fontSize: 10,
+                        padding: "2px 7px",
+                        borderRadius: 99,
+                        color: dc.color,
+                        border: `1px solid ${dc.border}`,
+                        background: "#0F172A",
+                      }}
+                    >
+                      {item.difficulty}
+                    </span>
+                  </div>
+
+                  <div
+                    style={{
+                      fontSize: 14,
+                      fontWeight: 600,
+                      color: "#F1F5F9",
+                      marginBottom: 6,
+                    }}
+                  >
+                    {item.topic}
+                  </div>
+
+                  <div
+                    style={{
+                      fontSize: 11,
+                      color: "#64748B",
+                    }}
+                  >
+                    {item.chapter}
+                  </div>
                 </div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: "#F1F5F9", marginBottom: 6 }}>{item.topic}</div>
-                <div style={{ fontSize: 11, color: "#64748B" }}>{item.chapter}</div>
+
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "flex-end",
+                    gap: 6,
+                    flexShrink: 0,
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: 11,
+                      color: "#94A3B8",
+                    }}
+                  >
+                    {item.estimatedMinutes} min
+                  </span>
+
+                  {activeTopic !== item.id ? (
+                    <button
+                      style={{
+                        ...S.pillBtn,
+                        background: color,
+                        color: "#fff",
+                        fontSize: 11,
+                      }}
+                      onClick={() => {
+                        setActiveTopic(item.id);
+                        setStartedAt((prev) => ({
+                          ...prev,
+                          [item.id]: new Date(),
+                        }));
+                      }}
+                    >
+                      Start
+                    </button>
+                  ) : (
+                    <span
+                      style={{
+                        fontSize: 11,
+                        color: "#22C55E",
+                        fontWeight: 600,
+                      }}
+                    >
+                      ● Studying
+                    </span>
+                  )}
+                </div>
               </div>
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6, flexShrink: 0 }}>
-                <span style={{ fontSize: 11, color: "#94A3B8" }}>{item.estimatedMinutes} min</span>
-                <button style={{ ...S.pillBtn, background: color, color: "#fff", fontSize: 11 }}>
-                  Start
-                </button>
-              </div>
+
+              {/* Expanded Section */}
+              {activeTopic === item.id && (
+                <div
+                  style={{
+                    marginTop: 16,
+                    paddingTop: 16,
+                    borderTop: "1px solid rgba(255,255,255,.08)",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 14,
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 12,
+                      color: "#94A3B8",
+                      display: "flex",
+                      justifyContent: "space-between",
+                    }}
+                  >
+                    <div>
+                      🕒 Started at{" "}
+                      {startedAt[item.id]?.toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </div>
+                    <button
+                      onClick={() => {
+                        setActiveTopic(null);
+
+                        setStartedAt((prev) => {
+                          const copy = { ...prev };
+                          delete copy[item.id];
+                          return copy;
+                        });
+
+                        setStudyMinutes((prev) => {
+                          const copy = { ...prev };
+                          delete copy[item.id];
+                          return copy;
+                        });
+                      }}
+                      style={{
+                        width: 22,
+                        height: 22,
+                        borderRadius: "50%",
+                        border: "none",
+                        background: "rgba(239, 68, 68, 0.12)",
+                        color: "#EF4444",
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: 14,
+                        fontWeight: 700,
+                        transition: "all .2s ease",
+                      }}
+                    >
+                      ×
+                    </button>
+                  </div>
+
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 6,
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontSize: 12,
+                        color: "#CBD5E1",
+                        fontWeight: 500,
+                      }}
+                    >
+                      Study Time
+                    </span>
+
+                    <input
+                      type="number"
+                      min={1}
+                      placeholder="Custom (minutes)"
+                      value={studyMinutes[item.id] || ""}
+                      onChange={(e) =>
+                        setStudyMinutes((prev) => ({
+                          ...prev,
+                          [item.id]: e.target.value,
+                        }))
+                      }
+                      style={{
+                        background: "#0F172A",
+                        border: "1px solid rgba(255,255,255,.08)",
+                        color: "#fff",
+                        padding: "10px 12px",
+                        borderRadius: 10,
+                        outline: "none",
+                      }}
+                    />
+                  </div>
+
+                  <button
+                    style={{
+                      background: "#22C55E",
+                      color: "#fff",
+                      border: "none",
+                      borderRadius: 10,
+                      padding: "10px",
+                      fontWeight: 600,
+                      cursor: "pointer",
+                    }}
+                    onClick={() => {
+                      console.log({
+                        topic: item,
+                        startedAt: startedAt[item.id],
+                        studyMinutes: studyMinutes[item.id],
+                      });
+
+                      setActiveTopic(null);
+                    }}
+                  >
+                    ✓ Complete Topic
+                  </button>
+                </div>
+              )}
             </div>
           );
         })}
       </div>
-      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 10 }}>
-        <span style={{ fontSize: 12, color: "#64748B" }}>Total: {Math.floor(totalMin / 60)}h {totalMin % 60}m</span>
+
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "flex-end",
+          marginTop: 10,
+        }}
+      >
+        <span
+          style={{
+            fontSize: 12,
+            color: "#64748B",
+          }}
+        >
+          Total: {Math.floor(totalMin / 60)}h {totalMin % 60}m
+        </span>
       </div>
     </div>
   );
+
 }
 
 function AnalyticsRow({ dashboard }) {
@@ -438,14 +666,14 @@ function AnalyticsRow({ dashboard }) {
   );
 }
 
-function StudyCharts() {
+function StudyCharts({ analytics }) {
   return (
     <div style={S.section}>
       <SectionHead title="Study analytics" />
 
       <div style={{ fontSize: 12, color: "#64748B", marginBottom: 8 }}>Daily study hours</div>
       <ResponsiveContainer width="100%" height={130}>
-        <LineChart data={STUDY_HOURS} margin={{ top: 4, right: 4, left: -30, bottom: 0 }}>
+        <LineChart data={analytics.dailyStudyHours} margin={{ top: 4, right: 4, left: -30, bottom: 0 }}>
           <XAxis dataKey="day" tick={{ fill: "#64748B", fontSize: 11 }} axisLine={false} tickLine={false} />
           <YAxis tick={{ fill: "#64748B", fontSize: 11 }} axisLine={false} tickLine={false} />
           <Tooltip content={<DarkTooltip />} />
@@ -456,7 +684,7 @@ function StudyCharts() {
 
       <div style={{ fontSize: 12, color: "#64748B", margin: "16px 0 8px" }}>Topics completed this week</div>
       <ResponsiveContainer width="100%" height={110}>
-        <BarChart data={COMPLETION_DATA} margin={{ top: 4, right: 4, left: -30, bottom: 0 }}>
+        <BarChart data={analytics.weeklyCompletions} margin={{ top: 4, right: 4, left: -30, bottom: 0 }}>
           <XAxis dataKey="day" tick={{ fill: "#64748B", fontSize: 11 }} axisLine={false} tickLine={false} />
           <YAxis tick={{ fill: "#64748B", fontSize: 11 }} axisLine={false} tickLine={false} />
           <Tooltip content={<DarkTooltip />} />
@@ -467,10 +695,10 @@ function StudyCharts() {
   );
 }
 
-function HeatmapAndDonut({ dashboard, subjectDistribution }) {
+function HeatmapAndDonut({ dashboard, subjectDistribution, heatmap }) {
   const { streak } = dashboard;
   const weeks = [];
-  for (let i = 0; i < HEATMAP_DATA.length; i += 7) weeks.push(HEATMAP_DATA.slice(i, i + 7));
+  for (let i = 0; i < heatmap.length; i += 7) weeks.push(heatmap.slice(i, i + 7));
   return (
     <div style={S.section}>
       <SectionHead title="Consistency heatmap" />
@@ -602,13 +830,15 @@ function SubjectCards() {
 //   );
 // }
 
-function RecentAndUpcoming() {
+function RecentAndUpcoming({ recentActivity, upcoming }) {
   return (
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0 }}>
       {/* Recent */}
       <div style={{ ...S.section, borderRight: "1px solid #1E293B" }}>
         <SectionHead title="Recent" />
-        {RECENT_ACTIVITY.map((g, i) => (
+        {recentActivity.length === 0 ? (
+          <div style={{ fontSize: 12, color: "#64748B" }}>No recent sessions yet.</div>
+        ) : recentActivity.map((g, i) => (
           <div key={i} style={{ marginBottom: 12 }}>
             <div style={{ fontSize: 10, color: "#64748B", fontWeight: 600, marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.06em" }}>{g.label}</div>
             {g.items.map((item, j) => (
@@ -625,7 +855,9 @@ function RecentAndUpcoming() {
       <div style={S.section}>
         <SectionHead title="Upcoming" />
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {UPCOMING.map((item, i) => (
+          {upcoming.length === 0 ? (
+            <div style={{ fontSize: 12, color: "#64748B" }}>No upcoming items yet.</div>
+          ) : upcoming.map((item, i) => (
             <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: "8px 10px", borderRadius: 10, background: "#0F172A", border: `1px solid ${item.color}22` }}>
               <div style={{ width: 3, height: "100%", minHeight: 32, borderRadius: 99, background: item.color, flexShrink: 0 }} />
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -760,6 +992,10 @@ export default function Dashboard() {
   const { progress, completedTopics, totalTopics } = calculateOverallProgress(topics);
   const streak = calculateStreak(studySessions);
   const todayStudied = calculateTodayStudied(studySessions);
+  const analytics = getStudyAnalytics(studySessions, topics, 7);
+  const heatmap = getConsistencyHeatmap(studySessions, 28);
+  const recentActivity = getRecentActivity(studySessions, topics);
+  const upcoming = getUpcomingItems(generateTodaysPlan(topics, subjects, dailyStudyHours));
   const xp = calculateXP(topics, studySessions, dailyStudyHours, streak, todayStudied);
   const { level, xpCurrent, xpNext } = calculateXpProgress(xp);
   const examDaysLeft = getExamDaysLeft(profile.examDate);
@@ -806,11 +1042,11 @@ export default function Dashboard() {
       {/* <ResumeCard /> */}
       <TodaysPlan />
       <AnalyticsRow dashboard={dashboard} />
-      <StudyCharts />
-      <HeatmapAndDonut dashboard={dashboard} subjectDistribution={subjectDistribution} />
+      <StudyCharts analytics={analytics} />
+      <HeatmapAndDonut dashboard={dashboard} subjectDistribution={subjectDistribution} heatmap={heatmap} />
       <SubjectCards />
       {/* <AICoach /> */}
-      <RecentAndUpcoming />
+      <RecentAndUpcoming recentActivity={recentActivity} upcoming={upcoming} />
       <Achievements dashboard={dashboard} />
       <FAB />
     </div>
