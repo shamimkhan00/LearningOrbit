@@ -52,8 +52,8 @@ export default function RoadmapPage() {
     openEdit,
     saveModal,
     deleteTopic,
+    deleteSubject,
     toggleSection,
-    saveToFirestore,
     generateRoadmapFromApi,
     updateForm,
   } = useRoadmap();
@@ -225,31 +225,16 @@ export default function RoadmapPage() {
         </div>
       </div>
 
-      <div className="fixed bottom-0 left-0 right-0 z-20 flex justify-center px-4 pb-5 pt-8 bg-gradient-to-t from-[#0F172A] via-[#0F172A]/80 to-transparent pointer-events-none">
-        <button
-          onClick={saveToFirestore}
-          disabled={saving}
-          className="pointer-events-auto flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-60 text-white text-sm font-medium px-7 py-[13px] rounded-xl shadow-[0_4px_20px_rgba(16,185,129,0.3)] transition-all duration-150 hover:-translate-y-[1px]"
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-            <polyline points="17 21 17 13 7 13 7 21" />
-            <polyline points="7 3 7 8 15 8" />
-          </svg>
-          {saving ? "Saving…" : "Save to Firestore"}
-        </button>
-      </div>
-
       {modalOpen && (
         <TopicModal
           mode={modalMode}
           subject={subjects}
-          setSubjects={setSubjects}
           form={form}
           subjectValue={subjectForm}
           onChange={updateForm}
           onSubjectChange={setSubjectForm}
           onSave={saveModal}
+          onDeleteSubject={deleteSubject}
           onClose={() => setModalOpen(false)}
         />
       )}

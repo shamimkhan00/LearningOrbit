@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
@@ -14,34 +14,142 @@ const EMPTY_FORM = {
   weightage: "high" as RoadmapTopic["weightage"],
 };
 
-function getStudySessionStorageKey(userId: string) {
-  return `learningorbit:study-sessions:v2:${userId}`;
+function toDateValue(value: unknown) {
+  if (value instanceof Date) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  if (value && typeof value === "object" && "toDate" in value) {
+    const maybeDate = value as { toDate?: () => Date };
+    if (typeof maybeDate.toDate === "function") {
+      const parsed = maybeDate.toDate();
+      return parsed instanceof Date ? parsed : null;
+    }
+  }
+
+  return null;
 }
 
-function loadStoredStudySessions(userId: string): StudySession[] {
-  if (typeof window === "undefined") {
+function normalizeStudySession(value: unknown): StudySession | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const session = value as Partial<StudySession> & {
+    startTime?: unknown;
+    endTime?: unknown;
+  };
+
+  const startTime = toDateValue(session.startTime);
+  const endTime = toDateValue(session.endTime);
+
+  if (
+    typeof session.id !== "string" ||
+    typeof session.userId !== "string" ||
+    typeof session.topicId !== "string" ||
+    !startTime ||
+    !endTime ||
+    typeof session.duration !== "number" ||
+    typeof session.completed !== "boolean"
+  ) {
+    return null;
+  }
+
+  return {
+    id: session.id,
+    userId: session.userId,
+    topicId: session.topicId,
+    startTime,
+    endTime,
+    duration: session.duration,
+    completed: session.completed,
+  };
+}
+
+function loadStudySessionsFromProfile(profileData: Record<string, unknown> | undefined): StudySession[] {
+  const rawSessions = profileData?.studySessions;
+
+  if (!Array.isArray(rawSessions)) {
     return [];
   }
 
-  try {
-    const stored = window.localStorage.getItem(getStudySessionStorageKey(userId));
-    if (!stored) {
-      return [];
-    }
-
-    const parsed = JSON.parse(stored) as StudySession[];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
+  return rawSessions.map(normalizeStudySession).filter((session): session is StudySession => session !== null);
 }
 
 function persistStudySessions(userId: string, sessions: StudySession[]) {
-  if (typeof window === "undefined") {
-    return;
-  }
+  void setDoc(
+    doc(db, "users", userId),
+    {
+      studySessions: sessions,
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true }
+  );
+}
 
-  window.localStorage.setItem(getStudySessionStorageKey(userId), JSON.stringify(sessions));
+function persistRoadmapState(userId: string, nextTopics: RoadmapTopic[], nextSubjects: RoadmapSubject[]) {
+  void setDoc(
+    doc(db, "roadmaps", userId),
+    {
+      topics: nextTopics,
+      subjects: nextSubjects,
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true }
+  );
+}
+
+async function persistRoadmapSnapshot(
+  userId: string,
+  nextTopics: RoadmapTopic[],
+  nextSubjects: RoadmapSubject[],
+  nextStudySessions: StudySession[],
+  profileData?: Record<string, unknown>
+) {
+  const dailyStudyHours = Number(profileData?.dailyStudyHours ?? 0);
+  const streak = calculateStreak(nextStudySessions);
+  const todayStudied = calculateTodayStudied(nextStudySessions);
+  const xp = calculateXP(nextTopics, nextStudySessions, dailyStudyHours, streak, todayStudied);
+  const { level } = calculateXpProgress(xp);
+
+  const nextProfile = {
+    exam: typeof profileData?.exam === "string" && profileData.exam.trim() ? profileData.exam : "JEE",
+    educationLevel:
+      typeof profileData?.educationLevel === "string" && profileData.educationLevel.trim()
+        ? profileData.educationLevel
+        : "Class 12",
+    examDate: normalizeExamDate(profileData?.examDate),
+    dailyStudyHours,
+    additionalInfo: typeof profileData?.additionalInfo === "string" ? profileData.additionalInfo : "",
+    xp,
+    level,
+  };
+
+  await Promise.all([
+    setDoc(
+      doc(db, "roadmaps", userId),
+      {
+        topics: nextTopics,
+        subjects: nextSubjects,
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    ),
+    setDoc(
+      doc(db, "users", userId),
+      {
+        profile: nextProfile,
+        studySessions: nextStudySessions,
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    ),
+  ]);
 }
 
 function normalizeExamDate(value: unknown): Date | null {
@@ -123,6 +231,7 @@ export function useRoadmap() {
   const [subjectForm, setSubjectForm] = useState("");
   const [toastMsg, setToastMsg] = useState("");
   const [toastVisible, setToastVisible] = useState(false);
+  const latestProfileData = useRef<Record<string, unknown> | undefined>(undefined);
 
   useEffect(() => {
     let ignore = false;
@@ -135,7 +244,8 @@ export function useRoadmap() {
         const snapshot = await getDoc(roadmapRef);
         const userSnapshot = await getDoc(userRef);
         const profileData = userSnapshot.data()?.profile as Record<string, unknown> | undefined;
-        const loadedStudySessions = loadStoredStudySessions(userId);
+        latestProfileData.current = profileData;
+        const loadedStudySessions = loadStudySessionsFromProfile(userSnapshot.data() as Record<string, unknown> | undefined);
         let loadedTopics: RoadmapTopic[] = [];
 
         if (!ignore) {
@@ -172,7 +282,15 @@ export function useRoadmap() {
           };
           setProfile(nextProfile);
           setDailyStudyHours(nextDailyStudyHours);
-          void syncUserMetrics(userId, loadedTopics, loadedStudySessions, nextDailyStudyHours, profileData);
+          void persistRoadmapSnapshot(
+            userId,
+            loadedTopics,
+            snapshot.exists() ? ((snapshot.data() as RoadmapPayload).subjects ?? buildSubjectsFromTopics(loadedTopics)) : buildSubjectsFromTopics(loadedTopics),
+            loadedStudySessions,
+            profileData
+          ).catch(() => {
+            // Ignore persistence failures for now.
+          });
         }
       } catch {
         // Ignore load failures for now.
@@ -314,35 +432,37 @@ export function useRoadmap() {
 
   function toggleComplete(id: string) {
     const user = auth.currentUser;
+    if (!user) {
+      return;
+    }
 
-    setTopics((prev) => {
-      const targetTopic = prev.find((topic) => topic.id === id);
+    const targetTopic = topics.find((topic) => topic.id === id);
 
-      if (!targetTopic) {
-        return prev;
-      }
+    if (!targetTopic) {
+      return;
+    }
 
-      const nextCompleted = !targetTopic.completed;
+    const nextCompleted = !targetTopic.completed;
+    const nextTopics = topics.map((topic) => (topic.id === id ? { ...topic, completed: nextCompleted } : topic));
+    const nextStudySessions = nextCompleted
+      ? [
+          ...studySessions.filter((session) => session.topicId !== id),
+          {
+            id: `${id}-${Date.now()}`,
+            userId: user.uid,
+            topicId: id,
+            startTime: new Date(),
+            endTime: new Date(),
+            duration: 0,
+            completed: true,
+          },
+      ]
+      : studySessions.filter((session) => session.topicId !== id);
 
-      if (user && nextCompleted) {
-        const session: StudySession = {
-          id: `${id}-${Date.now()}`,
-          userId: user.uid,
-          topicId: id,
-          startTime: new Date(),
-          endTime: new Date(),
-          duration: 0,
-          completed: true,
-        };
-
-        setStudySessions((prevSessions) => {
-          const nextSessions = [...prevSessions, session];
-          persistStudySessions(user.uid, nextSessions);
-          return nextSessions;
-        });
-      }
-
-      return prev.map((topic) => (topic.id === id ? { ...topic, completed: nextCompleted } : topic));
+    setTopics(nextTopics);
+    setStudySessions(nextStudySessions);
+    void persistRoadmapSnapshot(user.uid, nextTopics, subjects, nextStudySessions, latestProfileData.current).catch(() => {
+      // Ignore persistence failures for now.
     });
   }
 
@@ -372,75 +492,145 @@ export function useRoadmap() {
     setModalOpen(true);
   }
 
-  function saveModal() {
+  async function saveModal() {
+    const user = auth.currentUser;
+    if (!user) {
+      showToast("Please sign in first");
+      return;
+    }
+
     if (modalMode === "subject") {
       const trimmedSubject = subjectForm.trim();
       if (!trimmedSubject) {
         return;
       }
 
-      ensureSubjectExists(trimmedSubject);
+      const nextSubjects = subjects.some((subject) => subject.name.toLowerCase() === trimmedSubject.toLowerCase())
+        ? subjects
+        : [...subjects, { id: createSubjectId(trimmedSubject), name: trimmedSubject }];
+
+      setSubjects(nextSubjects);
       setForm((prev) => ({ ...prev, subject: trimmedSubject }));
       showToast("Subject added");
       setModalOpen(false);
+
+      void persistRoadmapSnapshot(user.uid, topics, nextSubjects, studySessions, latestProfileData.current).catch(() => {
+        showToast("Failed to save subject.");
+      });
       return;
     }
 
     const trimmedTopic = form.topic.trim();
     const trimmedChapter = form.chapter.trim();
-    if (!trimmedTopic || !trimmedChapter) {
+    const trimmedSubject = form.subject.trim();
+    if (!trimmedTopic || !trimmedChapter || !trimmedSubject) {
       return;
     }
 
+    const nextSubjects = subjects.some((subject) => subject.name.toLowerCase() === trimmedSubject.toLowerCase())
+      ? subjects
+      : [...subjects, { id: createSubjectId(trimmedSubject), name: trimmedSubject }];
+
     if (modalMode === "edit" && editId) {
-      setTopics((prev) => {
-        const nextTopics = prev.map((topic) =>
-          topic.id === editId
-            ? {
-              ...topic,
-              topic: trimmedTopic,
-              chapter: trimmedChapter,
-              subject: form.subject,
-              difficulty: form.difficulty as RoadmapTopic["difficulty"],
-              weightage: form.weightage as RoadmapTopic["weightage"],
-            }
-            : topic
-        );
+      const nextTopics = topics.map((topic) =>
+        topic.id === editId
+          ? {
+            ...topic,
+            topic: trimmedTopic,
+            chapter: trimmedChapter,
+            subject: trimmedSubject,
+            difficulty: form.difficulty as RoadmapTopic["difficulty"],
+            weightage: form.weightage as RoadmapTopic["weightage"],
+          }
+          : topic
+      );
 
-        ensureSubjectExists(form.subject);
-        return nextTopics;
-      });
+      setTopics(nextTopics);
+      setSubjects(nextSubjects);
       showToast("Topic updated");
-    } else {
-      const newId = `${trimmedTopic.toLowerCase().replace(/\s+/g, "-")}-${Date.now()}`;
-      const newTopic: RoadmapTopic = {
-        id: newId,
-        subject: form.subject,
-        chapter: trimmedChapter,
-        topic: trimmedTopic,
-        difficulty: form.difficulty as RoadmapTopic["difficulty"],
-        weightage: form.weightage as RoadmapTopic["weightage"],
-        completed: false,
-      };
+      setModalOpen(false);
 
-      setTopics((prev) => {
-        const nextTopics = [...prev, newTopic];
-        ensureSubjectExists(form.subject);
-        return nextTopics;
+      void persistRoadmapSnapshot(user.uid, nextTopics, nextSubjects, studySessions, latestProfileData.current).catch(() => {
+        showToast("Failed to save topic.");
       });
-      showToast("Topic added");
+      return;
     }
 
+    const newId = `${trimmedTopic.toLowerCase().replace(/\s+/g, "-")}-${Date.now()}`;
+    const newTopic: RoadmapTopic = {
+      id: newId,
+      subject: trimmedSubject,
+      chapter: trimmedChapter,
+      topic: trimmedTopic,
+      difficulty: form.difficulty as RoadmapTopic["difficulty"],
+      weightage: form.weightage as RoadmapTopic["weightage"],
+      completed: false,
+    };
+
+    const nextTopics = [...topics, newTopic];
+
+    setTopics(nextTopics);
+    setSubjects(nextSubjects);
+    showToast("Topic added");
     setModalOpen(false);
+
+    void persistRoadmapSnapshot(user.uid, nextTopics, nextSubjects, studySessions, latestProfileData.current).catch(() => {
+      showToast("Failed to save topic.");
+    });
   }
 
   function deleteTopic(id: string) {
+    const user = auth.currentUser;
+    if (!user) {
+      showToast("Please sign in first");
+      return;
+    }
+
     if (!window.confirm("Delete this topic?")) {
       return;
     }
 
-    setTopics((prev) => prev.filter((topic) => topic.id !== id));
+    const nextTopics = topics.filter((topic) => topic.id !== id);
+    const nextStudySessions = studySessions.filter((session) => session.topicId !== id);
+
+    setTopics(nextTopics);
+    setStudySessions(nextStudySessions);
+    void persistRoadmapSnapshot(user.uid, nextTopics, subjects, nextStudySessions, latestProfileData.current).catch(() => {
+      showToast("Failed to delete topic.");
+    });
     showToast("Topic deleted");
+  }
+
+  function deleteSubject(subjectId: string) {
+    const user = auth.currentUser;
+    if (!user) {
+      showToast("Please sign in first");
+      return;
+    }
+
+    const subject = subjects.find((item) => item.id === subjectId);
+    if (!subject) {
+      return;
+    }
+
+    if (!window.confirm(`Delete subject "${subject.name}" and its topics?`)) {
+      return;
+    }
+
+    const nextSubjects = subjects.filter((item) => item.id !== subjectId);
+    const removedTopicIds = new Set(
+      topics.filter((topic) => topic.subject === subject.name).map((topic) => topic.id)
+    );
+    const nextTopics = topics.filter((topic) => topic.subject !== subject.name);
+    const nextStudySessions = studySessions.filter((session) => !removedTopicIds.has(session.topicId));
+
+    setSubjects(nextSubjects);
+    setTopics(nextTopics);
+    setStudySessions(nextStudySessions);
+    void persistRoadmapSnapshot(user.uid, nextTopics, nextSubjects, nextStudySessions, latestProfileData.current).catch(() => {
+      showToast("Failed to delete subject.");
+    });
+    showToast("Subject deleted");
   }
 
   function toggleSection(subject: string) {
@@ -493,7 +683,15 @@ export function useRoadmap() {
       setTopics(generatedTopics);
       setSubjects(generatedSubjects);
       setActiveFilter("All");
-      await saveRoadmapToFirebase(generatedTopics, generatedSubjects);
+      if (auth.currentUser) {
+        await persistRoadmapSnapshot(
+          auth.currentUser.uid,
+          generatedTopics,
+          generatedSubjects,
+          studySessions,
+          latestProfileData.current
+        );
+      }
       showToast("Roadmap generated and saved");
     } catch {
       showToast("Generation failed â€” try again");
@@ -530,8 +728,8 @@ export function useRoadmap() {
     openEdit,
     saveModal,
     deleteTopic,
+    deleteSubject,
     toggleSection,
-    saveToFirestore,
     generateRoadmapFromApi,
     updateForm,
   };

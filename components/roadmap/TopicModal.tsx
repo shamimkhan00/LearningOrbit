@@ -1,11 +1,9 @@
 import type { RoadmapSubject, RoadmapTopic } from "@/types/roadmap";
-import { Dispatch, SetStateAction } from "react";
 
 
 interface TopicModalProps {
   mode: "add" | "edit" | "subject";
   subject: RoadmapSubject[];
-  setSubjects: Dispatch<SetStateAction<RoadmapSubject[]>>;
   form: {
     topic: string;
     chapter: string;
@@ -17,14 +15,11 @@ interface TopicModalProps {
   onChange: (field: string, value: string) => void;
   onSubjectChange: (value: string) => void;
   onSave: () => void;
+  onDeleteSubject: (subjectId: string) => void;
   onClose: () => void;
 }
 
-export function TopicModal({ mode,subject,setSubjects, form, subjectValue, onChange, onSubjectChange, onSave, onClose }: TopicModalProps) {
- 
-  const handleDeleteSubject = (subjectId: string) => {
-    setSubjects((prev) => prev.filter((item) => item.id !== subjectId));
-  };
+export function TopicModal({ mode, subject, form, subjectValue, onChange, onSubjectChange, onSave, onDeleteSubject, onClose }: TopicModalProps) {
 
     return (
     <div
@@ -48,7 +43,7 @@ export function TopicModal({ mode,subject,setSubjects, form, subjectValue, onCha
               onChange={(event) => onSubjectChange(event.target.value)}
             />
             {subject.length > 0 && (
-    <div className="mt-4 space-y-2">
+          <div className="mt-4 space-y-2">
       <p className="text-xs text-[#94A3B8]">Current Subjects</p>
 
       {subject.map((subject) => (
@@ -60,7 +55,7 @@ export function TopicModal({ mode,subject,setSubjects, form, subjectValue, onCha
 
           <button
             type="button"
-            onClick={() => handleDeleteSubject(subject.id)}
+            onClick={() => onDeleteSubject(subject.id)}
             className="text-red-400 hover:text-red-300 text-xs font-medium transition-colors"
           >
             Delete

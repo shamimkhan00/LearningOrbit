@@ -2,6 +2,9 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Plus, Check, X, ChevronLeft, ChevronRight, Flame, Pencil } from 'lucide-react';
+import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import { useAuth } from "@/providers/AuthProvider";
 
 type HabitStatus = 'done' | 'missed';
 
@@ -34,6 +37,20 @@ const MISSED = '#B3541E';
 const EMPTY = '#EFEBE1';
 const EMPTY_STROKE = '#D9D4C7';
 
+function normalizeTrackerData(raw: unknown): Partial<TrackerData> {
+  if (!raw || typeof raw !== "object") {
+    return {};
+  }
+
+  const data = raw as Partial<TrackerData>;
+
+  return {
+    habits: Array.isArray(data.habits) ? data.habits : undefined,
+    entries: data.entries && typeof data.entries === "object" ? data.entries : undefined,
+    notes: data.notes && typeof data.notes === "object" ? data.notes : undefined,
+  };
+}
+
 function polarToCartesian(cx: number, cy: number, r: number, angleDeg: number) {
   const rad = ((angleDeg - 90) * Math.PI) / 180;
   return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
@@ -65,6 +82,7 @@ function monthKey(year: number, month: number) {
 }
 
 export default function HabitTracker() {
+  const { user, loading: authLoading } = useAuth();
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth());
@@ -81,27 +99,66 @@ export default function HabitTracker() {
   const activeDays = isCurrentMonth ? now.getDate() : totalDays;
 
   useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem('habit-tracker-data');
-      if (raw) {
-        const data = JSON.parse(raw) as Partial<TrackerData>;
-        if (data.habits) setHabits(data.habits);
-        if (data.entries) setEntries(data.entries);
-        if (data.notes) setNotes(data.notes);
-      }
-    } catch {
-      // fresh start
+    if (authLoading) {
+      return;
     }
-    setLoaded(true);
-  }, []);
+
+    if (!user) {
+      setLoaded(true);
+      return;
+    }
+
+    const currentUser = user;
+    let cancelled = false;
+
+    async function loadHabitTracker() {
+      try {
+        const userRef = doc(db, "users", currentUser.uid);
+        const snapshot = await getDoc(userRef);
+        const trackerData = normalizeTrackerData(snapshot.data()?.habitTracker);
+
+        if (cancelled) {
+          return;
+        }
+
+        if (trackerData.habits) setHabits(trackerData.habits);
+        if (trackerData.entries) setEntries(trackerData.entries as HabitEntries);
+        if (trackerData.notes) setNotes(trackerData.notes as HabitNotes);
+      } catch {
+        // fall back to defaults if Firestore is unavailable
+      } finally {
+        if (!cancelled) {
+          setLoaded(true);
+        }
+      }
+    }
+
+    setLoaded(false);
+    void loadHabitTracker();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, user]);
 
   const persist = useCallback(async (next: TrackerData) => {
-    try {
-      window.localStorage.setItem('habit-tracker-data', JSON.stringify(next));
-    } catch (e) {
-      console.error('save failed', e);
+    if (!user) {
+      return;
     }
-  }, []);
+
+    try {
+      await setDoc(
+        doc(db, "users", user.uid),
+        {
+          habitTracker: next,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+    } catch {
+      console.error('save failed');
+    }
+  }, [user]);
 
   const monthEntries = entries[mKey] || {};
 
