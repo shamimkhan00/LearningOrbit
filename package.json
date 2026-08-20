@@ -13,6 +13,7 @@
     "firebase-admin": "^13.8.0",
     "groq-sdk": "^1.4.0",
     "lucide-react": "^1.25.0",
+    "navigation": "^6.5.0",
     "next": "16.2.4",
     "nodemailer": "^8.0.5",
     "react": "19.2.4",

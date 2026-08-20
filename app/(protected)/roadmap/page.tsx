@@ -7,7 +7,9 @@ import { Toast } from "@/components/roadmap/Toast";
 import { useRoadmap } from "@/hooks/use-roadmap";
 import { getProgressPercentage } from "@/lib/roadmap";
 import type { RoadmapTopic } from "@/types/roadmap";
-
+import Image from 'next/image';
+import logoIcon from '@/app/icon0.svg';
+import Link from "next/link";
 
 function ChevronDownIcon({ open }: { open: boolean }) {
   return (
@@ -55,14 +57,14 @@ export default function RoadmapPage() {
     deleteSubject,
     toggleSection,
     generateRoadmapFromApi,
-    updateForm,
+    handleFormChange,
   } = useRoadmap();
 
   const SUBJECT_COLORS: Record<string, string> = {
-  Physics: "#818CF8",
-  Chemistry: "#34D399",
-  Mathematics: "#FB923C",
-};
+    Physics: "#818CF8",
+    Chemistry: "#34D399",
+    Mathematics: "#FB923C",
+  };
 
   const subjectFilters = useMemo(() => ["All", ...subjects.map((subject) => subject.name)], [subjects]);
 
@@ -90,13 +92,16 @@ export default function RoadmapPage() {
       <div className="mx-auto max-w-lg pb-24">
         <header className="sticky top-0 z-10 flex items-center justify-between px-4 py-3 border-b border-[#334155] bg-[#0F172A]">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-indigo-500 flex items-center justify-center flex-shrink-0">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="3" />
-                <path d="M12 2a10 10 0 0 1 0 20A10 10 0 0 1 12 2" />
-                <path d="M2 12c0-2 4-6 10-6s10 4 10 6-4 6-10 6S2 14 2 12z" />
-              </svg>
-            </div>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+              <Image
+                src={logoIcon}
+                alt="LearningOrbit Logo"
+                width={32}
+                height={32}
+                priority
+              />
+
+            </span>
             <div>
               <p className="text-sm font-medium leading-none">LearningOrbit</p>
               <p className="text-[11px] text-[#94A3B8] mt-[2px]">Study Roadmap</p>
@@ -127,14 +132,31 @@ export default function RoadmapPage() {
           </div>
         </header>
 
-        <div className="px-4 py-3 border-b border-[#334155]">
-          <div className="flex justify-between text-[12px] mb-[6px]">
-            <span className="text-[#94A3B8]">{completedCount} of {topics.length} completed</span>
-            <span className="text-indigo-400 font-medium">{progressPct}%</span>
+        <div className="px-4 py-3 border-b border-[#334155] flex items-center justify-between">
+          <div className="flex-1 mr-4">
+            <div className="flex justify-between text-[12px] mb-[6px]">
+              <span className="text-[#94A3B8]">
+                {completedCount} of {topics.length} completed
+              </span>
+              <span className="text-indigo-400 font-medium">{progressPct}%</span>
+            </div>
+
+            <div className="h-1 bg-[#334155] rounded-full overflow-hidden">
+              <div
+                className="h-full bg-indigo-500 rounded-full transition-all duration-500"
+                style={{ width: `${progressPct}%` }}
+              />
+            </div>
           </div>
-          <div className="h-1 bg-[#334155] rounded-full overflow-hidden">
-            <div className="h-full bg-indigo-500 rounded-full transition-all duration-500" style={{ width: `${progressPct}%` }} />
-          </div>
+
+          <div className="rounded-md p-[1px] bg-gradient-to-r from-red-500 via-blue-500 to-green-400">
+  <Link
+    href="/dashboard"
+    className="block rounded-[5px] bg-[#0F172A] px-3 py-1.5 text-[12px] text-white"
+  >
+    Dashboard
+  </Link>
+</div>
         </div>
 
         <div className="flex gap-2 px-4 py-3 overflow-x-auto no-scrollbar border-b border-[#334155]">
@@ -147,7 +169,7 @@ export default function RoadmapPage() {
               {subjectName}
             </button>
           ))}
-          
+
         </div>
 
         <div className="px-4 pt-2">
@@ -231,7 +253,7 @@ export default function RoadmapPage() {
           subject={subjects}
           form={form}
           subjectValue={subjectForm}
-          onChange={updateForm}
+          onChange={handleFormChange}
           onSubjectChange={setSubjectForm}
           onSave={saveModal}
           onDeleteSubject={deleteSubject}

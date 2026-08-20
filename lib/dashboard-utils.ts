@@ -10,6 +10,16 @@ export interface StudySession {
   completed: boolean;
 }
 
+export interface StudyTarget {
+  minimumStudyHours: number;
+  syllabusRequiredHours: number;
+  totalStudyHours: number;
+  remainingMinutes: number;
+  remainingTopics: number;
+  daysLeft: number;
+  warning: string | null;
+}
+
 export interface DashboardResumeTopic {
   subject: string;
   topic: string;
@@ -282,6 +292,67 @@ export function getExamDaysLeft(examDate: unknown) {
   return diffDays > 0 ? diffDays : 0;
 }
 
+export function calculateStudyTarget(
+  topics: RoadmapTopic[],
+  examDate: unknown,
+  minimumStudyHours: number
+): StudyTarget {
+  const minimum = Math.max(0, Number(minimumStudyHours ?? 0));
+  const remainingTopics = topics.filter((topic) => !topic.completed);
+  const remainingMinutes = remainingTopics.reduce((sum, topic) => sum + (topic.estimatedMinutes ?? 0), 0);
+  const parsedExamDate = toDateValue(examDate);
+
+  if (!parsedExamDate) {
+    return {
+      minimumStudyHours: minimum,
+      syllabusRequiredHours: 0,
+      totalStudyHours: minimum,
+      remainingMinutes,
+      remainingTopics: remainingTopics.length,
+      daysLeft: 0,
+      warning: null,
+    };
+  }
+
+  const today = getDayStart(new Date());
+  const target = getDayStart(parsedExamDate);
+  const diffMs = target.getTime() - today.getTime();
+  const daysLeft = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+
+  if (daysLeft <= 0) {
+    return {
+      minimumStudyHours: minimum,
+      syllabusRequiredHours: remainingMinutes > 0 ? remainingMinutes / 60 : 0,
+      totalStudyHours: minimum,
+      remainingMinutes,
+      remainingTopics: remainingTopics.length,
+      daysLeft: 0,
+      warning: remainingMinutes > 0 ? "The exam date has passed, but syllabus topics are still incomplete." : null,
+    };
+  }
+
+  const syllabusRequiredHours = remainingMinutes / 60 / daysLeft;
+  const roundedSyllabusHours = Math.max(0, Math.round(syllabusRequiredHours * 10) / 10);
+  const totalStudyHours = Math.max(0.5, Math.round((minimum + roundedSyllabusHours) * 10) / 10);
+  const impossibleToCover = remainingMinutes > daysLeft * 24 * 60 || totalStudyHours > 24;
+  const extraNeeded = Math.max(0, roundedSyllabusHours - minimum);
+  const warning = impossibleToCover
+    ? "Even studying full-time, there is not enough time to cover the remaining syllabus before the exam."
+    : remainingMinutes > 0 && extraNeeded > 0
+      ? `You need about ${extraNeeded.toFixed(1)} extra hrs/day beyond your minimum to finish the syllabus on time.`
+      : null;
+
+  return {
+    minimumStudyHours: minimum,
+    syllabusRequiredHours: roundedSyllabusHours,
+    totalStudyHours,
+    remainingMinutes,
+    remainingTopics: remainingTopics.length,
+    daysLeft,
+    warning,
+  };
+}
+
 export function calculateXP(
   topics: RoadmapTopic[],
   studySessions: StudySession[],
@@ -420,9 +491,9 @@ export function calculatePerformanceDelta(
 }
 
 const ESTIMATED_MINUTES_BY_DIFFICULTY: Record<RoadmapTopic["difficulty"], number> = {
-  easy: 30,
-  medium: 45,
-  hard: 60,
+  easy: 90,
+  medium: 180,
+  hard: 360,
 };
 
 const DIFFICULTY_SCORE: Record<RoadmapTopic["difficulty"], number> = {
@@ -547,7 +618,7 @@ export function generateTodaysPlan(topics: RoadmapTopic[], subjects: RoadmapSubj
       const difficultyScore = DIFFICULTY_SCORE[topic.difficulty];
       const weightageScore = WEIGHTAGE_SCORE[topic.weightage];
       const revisionScore = 0;
-      const estimatedMinutes = ESTIMATED_MINUTES_BY_DIFFICULTY[topic.difficulty];
+      const estimatedMinutes = topic.estimatedMinutes || 90;
       const priority = difficultyScore + weightageScore + subjectScore + remainingScore + revisionScore;
 
       return {
@@ -597,11 +668,13 @@ export function generateTodaysPlan(topics: RoadmapTopic[], subjects: RoadmapSubj
   const todaysPlan: TodaysPlanItem[] = [];
 
   for (const topic of prioritizedTopics) {
-    if (remainingMinutes < topic.estimatedMinutes) {
+    const estimatedMinutes = topic.estimatedMinutes;
+
+    if (remainingMinutes < estimatedMinutes) {
       continue;
     }
 
-    remainingMinutes -= topic.estimatedMinutes;
+    remainingMinutes -= estimatedMinutes;
     todaysPlan.push({
       id: topic.id,
       subject: topic.subject,
@@ -609,7 +682,7 @@ export function generateTodaysPlan(topics: RoadmapTopic[], subjects: RoadmapSubj
       topic: topic.topic,
       difficulty: topic.difficulty,
       weightage: topic.weightage,
-      estimatedMinutes: topic.estimatedMinutes,
+      estimatedMinutes,
       priority: topic.priority,
     });
   }

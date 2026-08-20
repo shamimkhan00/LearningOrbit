@@ -12,11 +12,11 @@ export default function PublicLayout({
   const { user, loading } = useAuth();
   const router = useRouter();
 
-  useEffect(() => {
-    if (!loading && user) {
-      router.replace("/dashboard");
-    }
-  }, [loading, user, router]);
+  // useEffect(() => {
+  //   if (!loading && user) {
+  //     router.replace("/dashboard");
+  //   }
+  // }, [loading, user, router]);
 
   if (loading) {
     return <div>Loading...</div>;

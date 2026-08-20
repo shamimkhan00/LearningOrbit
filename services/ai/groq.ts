@@ -3,7 +3,9 @@ import Groq from "groq-sdk";
 type RoadmapProfile = {
   exam: string;
   educationLevel: string;
-  dailyStudyHours: number;
+  examDate: string;
+  preparationLevel?: "easy" | "medium" | "hard";
+  minimumStudyHours?: number;
   additionalInfo?: string;
 };
 
@@ -13,88 +15,68 @@ const groq = new Groq({
 
 export async function generateWithGroq(profile: RoadmapProfile) {
   if (!process.env.GROQ_API_KEY) {
-    throw new Error(
-      "Missing GROQ_API_KEY. Add it to your environment before generating a roadmap."
-    );
+    throw new Error("Missing GROQ_API_KEY. Add it to your environment before generating a roadmap.");
   }
 
+  const todayIso = new Date().toISOString();
   const prompt = `
-You are an expert educational planner specializing in competitive exam preparation.
+You are an expert competitive exam curriculum architect.
 
-Your task is to generate a COMPLETE syllabus roadmap for the student.
+Generate a COMPLETE and HIGHLY DETAILED syllabus roadmap.
 
-Student Profile
+Student profile:
 
 Exam: ${profile.exam}
-Education Level: ${profile.educationLevel}
-Daily Study Hours: ${profile.dailyStudyHours}
-Additional Information: ${profile.additionalInfo ?? "None"}
+Education level: ${profile.educationLevel}
+Preparation level: ${profile.preparationLevel ?? "medium"}
 
-Instructions:
+Generate the syllabus using:
 
-- Cover the COMPLETE syllabus for the selected exam: ${profile.exam}.
-- Tailor the roadmap to ${profile.exam}; do not assume JEE unless the selected exam is JEE.
-- Organize every topic into its correct Subject and Chapter.
-- Return topics in the recommended learning sequence, starting from fundamentals and progressing to advanced concepts.
-- Do not skip any important topics.
-- Avoid duplicate topics.
-- Generate one object for every study topic.
-- If the exam is NEET, include Biology, Chemistry, and Physics topics.
-- If the exam is GATE, include the relevant engineering/technical subjects and core concepts.
-- If the exam is UPSC/CAT, include subject areas appropriate to that exam.
+Subject → Chapter → Topic
 
-Difficulty Rules
+Rules:
 
-Use ONLY one of:
+* Generate the complete official syllabus for the selected exam.
+* Every topic must be ONE atomic learning concept.
+* Do not merge multiple concepts into one topic.
+* Expand every chapter into all standard coaching-level topics.
+* Arrange topics from fundamentals to advanced concepts.
+* Include PYQ-important topics.
+* Avoid duplicate topics.
+* Do not generate a study plan.
+* Do not summarize chapters.
 
-- easy
-- medium
-- hard
+For JEE and NEET, each major chapter should contain 10–30 detailed topics.
 
-Weightage Rules
+For UPSC, Polity, Economy, History, Geography, Environment, Ethics, and Essay should be expanded comprehensively.
 
-Use ONLY one of:
+For CAT, GATE, CA, and CLAT, generate detailed topic-level coverage.
 
-- low
-- medium
-- high
-
-Output Rules
-
-Return ONLY valid JSON.
-
-DO NOT:
-
-- Explain anything.
-- Add markdown.
-- Wrap the response inside \`\`\`.
-- Add comments.
-- Add text before or after the JSON.
-
-Return this exact schema:
+Return ONLY valid JSON in this format:
 
 {
-  "metadata": {
-    "exam": "${profile.exam}",
-    "generatedAt": "2026-07-29T12:00:00.000Z",
-    "version": 1
-  },
-  "roadmap": [
-    {
-      "id": "physics-mechanics-units-and-dimensions",
-      "subject": "Physics",
-      "chapter": "Mechanics",
-      "topic": "Units and Dimensions",
-      "difficulty": "easy",
-      "weightage": "high",
-      "completed": false
-    }
-  ]
+"metadata": {
+"exam": "${profile.exam}",
+"version": 1
+},
+"roadmap": [
+{
+"id": "physics-rotational-motion-parallel-axis-theorem",
+"subject": "Physics",
+"chapter": "Rotational Motion",
+"topic": "Parallel axis theorem",
+"difficulty": "medium",
+"weightage": "high",
+"estimatedMinutes": 90,
+"completed": false
 }
+]
+}
+
 `;
 
   const completion = await groq.chat.completions.create({
-    model: "llama-3.3-70b-versatile",
+    model: "openai/gpt-oss-120b",
     temperature: 0.2,
     response_format: {
       type: "json_object",
@@ -129,10 +111,11 @@ Return this exact schema:
         metadata: {
           exam: profile.exam,
           generatedAt: new Date().toISOString(),
-          version: 1,
+          version: 2,
           ...(parsed.metadata || {}),
         },
         roadmap: parsed.roadmap,
+        studyPlan: Array.isArray(parsed.studyPlan) ? parsed.studyPlan : [],
       };
     }
 

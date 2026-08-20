@@ -13,7 +13,8 @@ export async function completeUserSetup(
     exam: string;
     educationLevel: string;
     examDate: string;
-    dailyStudyHours: number;
+    preparationLevel: "easy" | "medium" | "hard";
+    minimumStudyHours: number;
     additionalInfo: string;
   }
 ) {
@@ -26,7 +27,9 @@ export async function completeUserSetup(
         exam: formData.exam,
         educationLevel: formData.educationLevel,
         examDate: Timestamp.fromDate(new Date(formData.examDate)),
-        dailyStudyHours: formData.dailyStudyHours,
+        preparationLevel: formData.preparationLevel,
+        minimumStudyHours: formData.minimumStudyHours,
+        dailyStudyHours: formData.minimumStudyHours,
         additionalInfo: formData.additionalInfo,
       },
       setupCompleted: true,

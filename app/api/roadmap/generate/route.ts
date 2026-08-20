@@ -12,7 +12,14 @@ export async function POST(request: Request) {
         typeof body?.educationLevel === "string" && body.educationLevel.trim()
           ? body.educationLevel.trim()
           : "Class 12",
-      dailyStudyHours: Number.isFinite(Number(body?.dailyStudyHours)) ? Number(body.dailyStudyHours) : 6,
+      examDate: typeof body?.examDate === "string" && body.examDate.trim() ? body.examDate.trim() : "",
+      preparationLevel:
+        body?.preparationLevel === "easy" || body?.preparationLevel === "medium" || body?.preparationLevel === "hard"
+          ? body.preparationLevel
+          : "medium",
+      minimumStudyHours: typeof body?.minimumStudyHours === "number" && Number.isFinite(body.minimumStudyHours)
+        ? body.minimumStudyHours
+        : 0,
       additionalInfo: typeof body?.additionalInfo === "string" ? body.additionalInfo : "",
     };
 

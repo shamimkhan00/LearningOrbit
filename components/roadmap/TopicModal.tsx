@@ -1,18 +1,22 @@
 import type { RoadmapSubject, RoadmapTopic } from "@/types/roadmap";
 
+type TopicModalForm = {
+  topics: string[];
+  chapter: string;
+  subject: string;
+  difficulty: RoadmapTopic["difficulty"];
+  weightage: RoadmapTopic["weightage"];
+};
 
 interface TopicModalProps {
   mode: "add" | "edit" | "subject";
   subject: RoadmapSubject[];
-  form: {
-    topic: string;
-    chapter: string;
-    subject: string;
-    difficulty: RoadmapTopic["difficulty"];
-    weightage: RoadmapTopic["weightage"];
-  };
+  form: TopicModalForm;
   subjectValue: string;
-  onChange: (field: string, value: string) => void;
+  onChange: (
+    field: keyof TopicModalForm,
+    value: string | string[]
+  ) => void;
   onSubjectChange: (value: string) => void;
   onSave: () => void;
   onDeleteSubject: (subjectId: string) => void;
@@ -20,8 +24,34 @@ interface TopicModalProps {
 }
 
 export function TopicModal({ mode, subject, form, subjectValue, onChange, onSubjectChange, onSave, onDeleteSubject, onClose }: TopicModalProps) {
+  const handleTopicChange = (index: number, value: string) => {
+    const updated = [...form.topics];
+    updated[index] = value;
 
-    return (
+    // Add a new empty input when typing in the last field
+    if (index === updated.length - 1 && value.trim() !== "") {
+      updated.push("");
+    }
+
+    onChange("topics", updated);
+  };
+
+  const handleTopicBlur = () => {
+    const cleaned = form.topics.filter(
+      (topic, index) =>
+        topic.trim() !== "" || index === form.topics.length - 1
+    );
+
+    if (
+      cleaned.length === 0 ||
+      cleaned[cleaned.length - 1].trim() !== ""
+    ) {
+      cleaned.push("");
+    }
+
+    onChange("topics", cleaned);
+  };
+  return (
     <div
       className="fixed inset-0 z-50 flex items-end justify-center bg-black/70"
       onClick={(event) => event.target === event.currentTarget && onClose()}
@@ -43,39 +73,31 @@ export function TopicModal({ mode, subject, form, subjectValue, onChange, onSubj
               onChange={(event) => onSubjectChange(event.target.value)}
             />
             {subject.length > 0 && (
-          <div className="mt-4 space-y-2">
-      <p className="text-xs text-[#94A3B8]">Current Subjects</p>
+              <div className="mt-4 space-y-2">
+                <p className="text-xs text-[#94A3B8]">Current Subjects</p>
 
-      {subject.map((subject) => (
-        <div
-          key={subject.id}
-          className="flex items-center justify-between bg-[#0F172A] border border-[#334155] rounded-lg px-3 py-2"
-        >
-          <span className="text-sm text-[#F8FAFC]">{subject.name}</span>
+                {subject.map((subject) => (
+                  <div
+                    key={subject.id}
+                    className="flex items-center justify-between bg-[#0F172A] border border-[#334155] rounded-lg px-3 py-2"
+                  >
+                    <span className="text-sm text-[#F8FAFC]">{subject.name}</span>
 
-          <button
-            type="button"
-            onClick={() => onDeleteSubject(subject.id)}
-            className="text-red-400 hover:text-red-300 text-xs font-medium transition-colors"
-          >
-            Delete
-          </button>
-        </div>
-      ))}
-    </div>
-  )}
+                    <button
+                      type="button"
+                      onClick={() => onDeleteSubject(subject.id)}
+                      className="text-red-400 hover:text-red-300 text-xs font-medium transition-colors"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         ) : (
           <>
-            <div className="mb-[14px]">
-              <label className="block text-[12px] text-[#94A3B8] mb-[6px]">Topic name</label>
-              <input
-                className="w-full bg-[#0F172A] border border-[#334155] rounded-lg px-3 py-[10px] text-sm text-[#F8FAFC] outline-none focus:border-indigo-500 transition-colors"
-                placeholder="e.g. Newton's Laws"
-                value={form.topic}
-                onChange={(event) => onChange("topic", event.target.value)}
-              />
-            </div>
+
 
             <div className="mb-[14px]">
               <label className="block text-[12px] text-[#94A3B8] mb-[6px]">Chapter</label>
@@ -86,6 +108,32 @@ export function TopicModal({ mode, subject, form, subjectValue, onChange, onSubj
                 onChange={(event) => onChange("chapter", event.target.value)}
               />
             </div>
+
+
+            <div className="mb-[14px]">
+  <label className="block text-[12px] text-[#94A3B8] mb-[6px]">
+    Topics
+  </label>
+
+  <div className="space-y-2">
+    {form.topics.map((topic, index) => (
+      <input
+        key={index}
+        className="w-full bg-[#0F172A] border border-[#334155] rounded-lg px-3 py-[10px] text-sm text-[#F8FAFC] outline-none focus:border-indigo-500 transition-colors"
+        placeholder={`Topic ${index + 1}`}
+        value={topic}
+        onChange={(event) =>
+          handleTopicChange(index, event.target.value)
+        }
+        onBlur={handleTopicBlur}
+      />
+    ))}
+  </div>
+
+  <p className="text-[11px] text-[#64748B] mt-2">
+    Type a topic and a new field will appear automatically.
+  </p>
+</div>
 
             <div className="grid grid-cols-2 gap-[10px] mb-[14px]">
               <div>
@@ -98,16 +146,16 @@ export function TopicModal({ mode, subject, form, subjectValue, onChange, onSubj
                   <option value="">
 
                     {subject.length === 0
-      ? "No subjects available"
-      : "Select Subject"}
-                
-                </option>
+                      ? "No subjects available"
+                      : "Select Subject"}
 
-{subject.map((subject) => (
-  <option key={subject.id} value={subject.name}>
-    {subject.name}
-  </option>
-))}
+                  </option>
+
+                  {subject.map((subject) => (
+                    <option key={subject.id} value={subject.name}>
+                      {subject.name}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div>

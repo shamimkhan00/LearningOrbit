@@ -1,5 +1,6 @@
 "use client";
 
+import Image from 'next/image';
 import { useState } from "react";
 import {
   LineChart, Line, BarChart, Bar,
@@ -12,6 +13,7 @@ import {
   generateTodaysPlan,
   calculateOverallProgress,
   calculateStreak,
+  calculateStudyTarget,
   calculateSubjectProgress,
   calculateTodayStudied,
   calculateXP,
@@ -29,6 +31,8 @@ import {
   getUpcomingItems,
 } from "@/lib/dashboard-utils";
 
+import TopicQuickComplete from "@/components/dashboard/Topicquickcomplete";
+import Sidebar from "@/components/sidebar/Sidebar";
 
 export const MOTIVATIONS = [
   "Every topic completed brings you closer to your goal.",
@@ -228,23 +232,56 @@ function SectionHead({ title, action }) {
 
 // ─── Sections ─────────────────────────────────────────────────────────────────
 
-function Header() {
+
+function Header({ onToggleSidebar }) {
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   return (
+
     <header style={S.header}>
-      <span style={S.logo}>LearningOrbit</span>
+      <span style={{ ...S.logo, display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+        <Image
+          src="./icon0.svg"
+          alt="LearningOrbit Logo"
+          width={32}
+          height={32}
+          priority
+        />
+        LearningOrbit
+      </span>
+
       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-        <div style={{ ...S.hBtn, width: 120, justifyContent: "flex-start", gap: 6 }}>
+        {/* <div style={{ ...S.hBtn, width: 120, justifyContent: "flex-start", gap: 6 }}>
           <span style={{ fontSize: 13 }}>🔍</span>
           <span style={{ fontSize: 12, color: "#64748B" }}>Search…</span>
-        </div>
-        <button style={S.hBtn} aria-label="Notifications">🔔</button>
-        <div style={{ width: 32, height: 32, borderRadius: 8, background: "#312E81", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, color: "#818CF8" }}>R</div>
+        </div> */}
+
+        {/* <button style={S.hBtn} aria-label="Notifications">🔔</button> */}
+
+        {/* User Avatar */}
+        <button
+          onClick={() => setIsSidebarOpen((prev) => !prev)}
+          style={{ width: 32, height: 32, borderRadius: 8, background: "#312E81", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, color: "#818CF8", cursor: "pointer" }}>
+          ☰
+        </button>
+
+        {/* Three-Bar Menu Button */}
+        {/* <button
+            onClick={() => setIsSidebarOpen((prev) => !prev)}
+            className=" bg-[#1E293B] text-white rounded-lg text-lg"
+          >
+            
+          </button> */}
       </div>
+      <Sidebar
+        isSidebarOpen={isSidebarOpen}
+        setIsSidebarOpen={setIsSidebarOpen}
+      ></Sidebar>
     </header>
+
   );
 }
 
-function Hero({ dashboard }) {
+function Hero({ dashboard, topics, studySessions, toggleComplete }) {
   const {
     progress,
     completedTopics,
@@ -252,11 +289,14 @@ function Hero({ dashboard }) {
     streak,
     todayGoal,
     todayStudied,
+    minimumStudyHours,
+    syllabusRequiredHours,
     examName,
     examDaysLeft,
     performanceScore,
     performanceDelta,
     resumeTopic,
+    studyWarning,
   } = dashboard;
   const goalPct = Math.round((todayStudied / Math.max(todayGoal, 1)) * 100);
   const today = new Date().getDate();
@@ -297,6 +337,9 @@ function Hero({ dashboard }) {
           <div style={{ fontSize: 10, color: "#6366F1", marginTop: 4, textAlign: "center", lineHeight: 1.4 }}>days until<br />{examName}</div>
         </div>
       </div>
+      {/* topic quick covered */}
+
+
 
       {/* Today's goal */}
       <div style={{ ...S.card, marginBottom: 16 }}>
@@ -304,14 +347,31 @@ function Hero({ dashboard }) {
           <span style={{ fontSize: 13, color: "#94A3B8" }}>Today&apos;s goal</span>
           <span style={{ fontSize: 13, fontWeight: 600, color: "#F1F5F9" }}>{todayStudied} / {todayGoal} hrs</span>
         </div>
+        <div style={{ fontSize: 11, color: "#64748B", marginBottom: 8 }}>
+          Minimum {minimumStudyHours}h + syllabus {syllabusRequiredHours}h
+        </div>
         <Bar2 pct={goalPct} h={7} />
-        <div style={{ fontSize: 11, color: "#64748B", marginTop: 6 }}>{Math.max(todayGoal - todayStudied, 0)} hours remaining today</div>
+        <div style={{ fontSize: 11, color: "#64748B", marginTop: 6 }}>{Math.max(todayGoal - todayStudied, 0).toFixed(1)} hours remaining today</div>
         {resumeTopic && (
           <div style={{ fontSize: 11, color: "#818CF8", marginTop: 8 }}>
             Next up: {resumeTopic.topic} • {resumeTopic.estimatedMinutes} min
           </div>
         )}
       </div>
+
+      {studyWarning && (
+        <div style={{ ...S.card, marginBottom: 16, borderColor: "#F59E0B", background: "#451A03" }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#FCD34D", marginBottom: 4 }}>Schedule warning</div>
+          <div style={{ fontSize: 12, lineHeight: 1.6, color: "#FDE68A" }}>{studyWarning}</div>
+        </div>
+      )}
+
+      <TopicQuickComplete
+        topics={topics}
+        studySessions={studySessions}
+        toggleComplete={toggleComplete}
+      />
+
     </div>
   );
 }
@@ -334,28 +394,44 @@ function Hero({ dashboard }) {
 //   );
 // }
 
-function TodaysPlan() {
-  const { subjects, topics, dailyStudyHours } = useRoadmap();
+function TodaysPlan({ subjects, topics, dailyStudyHours, toggleComplete }) {
   const [activeTopic, setActiveTopic] = useState(null);
   const [studyMinutes, setStudyMinutes] = useState({});
   const [startedAt, setStartedAt] = useState({});
-  const todayPlan = generateTodaysPlan(
-    topics,
-    subjects,
-    dailyStudyHours
-  );
-  const totalMin = todayPlan.reduce(
-    (sum, item) => sum + item.estimatedMinutes,
-    0
-  );
+  const [completing, setCompleting] = useState({});
+
+  const todayPlan = generateTodaysPlan(topics, subjects, dailyStudyHours);
+  const totalMin = todayPlan.reduce((sum, item) => sum + item.estimatedMinutes, 0);
+
+  async function handleComplete(item) {
+    setCompleting((prev) => ({ ...prev, [item.id]: true }));
+    try {
+      await toggleComplete(item.id);
+    } finally {
+      setCompleting((prev) => ({ ...prev, [item.id]: false }));
+      setActiveTopic(null);
+      setStartedAt((prev) => { const c = { ...prev }; delete c[item.id]; return c; });
+      setStudyMinutes((prev) => { const c = { ...prev }; delete c[item.id]; return c; });
+    }
+  }
+
+  function handleCancel(itemId) {
+    setActiveTopic(null);
+    setStartedAt((prev) => { const c = { ...prev }; delete c[itemId]; return c; });
+    setStudyMinutes((prev) => { const c = { ...prev }; delete c[itemId]; return c; });
+  }
+
   return (
     <div style={S.section}>
-      <SectionHead title="Today's plan" action="See all" />
+      <SectionHead title="Topics You’d Like to Cover" action="See all" />
 
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         {todayPlan.map((item) => {
           const dc = diffStyle(item.difficulty);
           const color = SUBJECT_COLORS[item.subject] ?? "#6366F1";
+          const isActive = activeTopic === item.id;
+          const isCompleting = completing[item.id];
+          const isDone = item.completed;
 
           return (
             <div
@@ -363,252 +439,81 @@ function TodaysPlan() {
               style={{
                 ...S.card,
                 transition: "all .25s ease",
+                opacity: isDone ? 0.5 : 1,
               }}
             >
               {/* Top Row */}
-              <div
-                style={{
-                  display: "flex",
-                  gap: 12,
-                  alignItems: "flex-start",
-                }}
-              >
-                <div
-                  style={{
-                    width: 3,
-                    borderRadius: 99,
-                    background: color,
-                    alignSelf: "stretch",
-                    flexShrink: 0,
-                  }}
-                />
+              <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+                <div style={{ width: 3, borderRadius: 99, background: isDone ? "#4ADE80" : color, alignSelf: "stretch", flexShrink: 0 }} />
 
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 6,
-                      marginBottom: 4,
-                    }}
-                  >
-                    <span
-                      style={{
-                        fontSize: 11,
-                        color: "#64748B",
-                      }}
-                    >
-                      {item.subject}
-                    </span>
-
-                    <span
-                      style={{
-                        fontSize: 10,
-                        padding: "2px 7px",
-                        borderRadius: 99,
-                        color: dc.color,
-                        border: `1px solid ${dc.border}`,
-                        background: "#0F172A",
-                      }}
-                    >
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                    <span style={{ fontSize: 11, color: "#64748B" }}>{item.subject}</span>
+                    <span style={{ fontSize: 10, padding: "2px 7px", borderRadius: 99, color: dc.color, border: `1px solid ${dc.border}`, background: "#0F172A" }}>
                       {item.difficulty}
                     </span>
                   </div>
-
-                  <div
-                    style={{
-                      fontSize: 14,
-                      fontWeight: 600,
-                      color: "#F1F5F9",
-                      marginBottom: 6,
-                    }}
-                  >
+                  <div style={{ fontSize: 14, fontWeight: 600, color: isDone ? "#4ADE80" : "#F1F5F9", marginBottom: 6, textDecoration: isDone ? "line-through" : "none" }}>
                     {item.topic}
                   </div>
-
-                  <div
-                    style={{
-                      fontSize: 11,
-                      color: "#64748B",
-                    }}
-                  >
-                    {item.chapter}
-                  </div>
+                  <div style={{ fontSize: 11, color: "#64748B" }}>{item.chapter}</div>
                 </div>
 
-                <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "flex-end",
-                    gap: 6,
-                    flexShrink: 0,
-                  }}
-                >
-                  <span
-                    style={{
-                      fontSize: 11,
-                      color: "#94A3B8",
-                    }}
-                  >
-                    {item.estimatedMinutes} min
-                  </span>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6, flexShrink: 0 }}>
+                  <span style={{ fontSize: 11, color: "#94A3B8" }}>{item.estimatedMinutes} min</span>
 
-                  {activeTopic !== item.id ? (
+                  {isDone ? (
+                    <span style={{ fontSize: 11, color: "#4ADE80", fontWeight: 600 }}>✓ Done</span>
+                  ) : !isActive ? (
                     <button
-                      style={{
-                        ...S.pillBtn,
-                        background: color,
-                        color: "#fff",
-                        fontSize: 11,
-                      }}
+                      style={{ ...S.pillBtn, background: color, color: "#fff", fontSize: 11 }}
                       onClick={() => {
                         setActiveTopic(item.id);
-                        setStartedAt((prev) => ({
-                          ...prev,
-                          [item.id]: new Date(),
-                        }));
+                        setStartedAt((prev) => ({ ...prev, [item.id]: new Date() }));
                       }}
                     >
                       Start
                     </button>
                   ) : (
-                    <span
-                      style={{
-                        fontSize: 11,
-                        color: "#22C55E",
-                        fontWeight: 600,
-                      }}
-                    >
-                      ● Studying
-                    </span>
+                    <span style={{ fontSize: 11, color: "#22C55E", fontWeight: 600 }}>● Studying</span>
                   )}
                 </div>
               </div>
 
               {/* Expanded Section */}
-              {activeTopic === item.id && (
-                <div
-                  style={{
-                    marginTop: 16,
-                    paddingTop: 16,
-                    borderTop: "1px solid rgba(255,255,255,.08)",
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 14,
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: 12,
-                      color: "#94A3B8",
-                      display: "flex",
-                      justifyContent: "space-between",
-                    }}
-                  >
+              {isActive && !isDone && (
+                <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px solid rgba(255,255,255,.08)", display: "flex", flexDirection: "column", gap: 14 }}>
+                  <div style={{ fontSize: 12, color: "#94A3B8", display: "flex", justifyContent: "space-between" }}>
                     <div>
                       🕒 Started at{" "}
-                      {startedAt[item.id]?.toLocaleTimeString([], {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
+                      {startedAt[item.id]?.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                     </div>
                     <button
-                      onClick={() => {
-                        setActiveTopic(null);
-
-                        setStartedAt((prev) => {
-                          const copy = { ...prev };
-                          delete copy[item.id];
-                          return copy;
-                        });
-
-                        setStudyMinutes((prev) => {
-                          const copy = { ...prev };
-                          delete copy[item.id];
-                          return copy;
-                        });
-                      }}
-                      style={{
-                        width: 22,
-                        height: 22,
-                        borderRadius: "50%",
-                        border: "none",
-                        background: "rgba(239, 68, 68, 0.12)",
-                        color: "#EF4444",
-                        cursor: "pointer",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        fontSize: 14,
-                        fontWeight: 700,
-                        transition: "all .2s ease",
-                      }}
+                      onClick={() => handleCancel(item.id)}
+                      style={{ width: 22, height: 22, borderRadius: "50%", border: "none", background: "rgba(239,68,68,0.12)", color: "#EF4444", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 700 }}
                     >
                       ×
                     </button>
                   </div>
 
-                  <div
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: 6,
-                    }}
-                  >
-                    <span
-                      style={{
-                        fontSize: 12,
-                        color: "#CBD5E1",
-                        fontWeight: 500,
-                      }}
-                    >
-                      Study Time
-                    </span>
-
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    <span style={{ fontSize: 12, color: "#CBD5E1", fontWeight: 500 }}>Study Time</span>
                     <input
                       type="number"
                       min={1}
                       placeholder="Custom (minutes)"
                       value={studyMinutes[item.id] || ""}
-                      onChange={(e) =>
-                        setStudyMinutes((prev) => ({
-                          ...prev,
-                          [item.id]: e.target.value,
-                        }))
-                      }
-                      style={{
-                        background: "#0F172A",
-                        border: "1px solid rgba(255,255,255,.08)",
-                        color: "#fff",
-                        padding: "10px 12px",
-                        borderRadius: 10,
-                        outline: "none",
-                      }}
+                      onChange={(e) => setStudyMinutes((prev) => ({ ...prev, [item.id]: e.target.value }))}
+                      style={{ background: "#0F172A", border: "1px solid rgba(255,255,255,.08)", color: "#fff", padding: "10px 12px", borderRadius: 10, outline: "none" }}
                     />
                   </div>
 
                   <button
-                    style={{
-                      background: "#22C55E",
-                      color: "#fff",
-                      border: "none",
-                      borderRadius: 10,
-                      padding: "10px",
-                      fontWeight: 600,
-                      cursor: "pointer",
-                    }}
-                    onClick={() => {
-                      console.log({
-                        topic: item,
-                        startedAt: startedAt[item.id],
-                        studyMinutes: studyMinutes[item.id],
-                      });
-
-                      setActiveTopic(null);
-                    }}
+                    disabled={isCompleting}
+                    style={{ background: "#22C55E", color: "#fff", border: "none", borderRadius: 10, padding: "10px", fontWeight: 600, cursor: isCompleting ? "not-allowed" : "pointer", opacity: isCompleting ? 0.7 : 1 }}
+                    onClick={() => handleComplete(item)}
                   >
-                    ✓ Complete Topic
+                    {isCompleting ? "Saving…" : "✓ Complete Topic"}
                   </button>
                 </div>
               )}
@@ -617,25 +522,53 @@ function TodaysPlan() {
         })}
       </div>
 
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "flex-end",
-          marginTop: 10,
-        }}
-      >
-        <span
-          style={{
-            fontSize: 12,
-            color: "#64748B",
-          }}
-        >
+      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 10 }}>
+        <span style={{ fontSize: 12, color: "#64748B" }}>
           Total: {Math.floor(totalMin / 60)}h {totalMin % 60}m
         </span>
       </div>
     </div>
   );
+}
 
+function StudyPlanSection({ plan }) {
+  if (!Array.isArray(plan) || plan.length === 0) {
+    return null;
+  }
+
+  return (
+    <div style={{ padding: "0 16px 16px" }}>
+      <SectionHead title="Syllabus roadmap" />
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        {plan.slice(0, 14).map((day) => (
+          <div key={`${day.date}-${day.label}`} style={S.card}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, marginBottom: 8 }}>
+              <div>
+                <div style={{ fontSize: 12, color: "#94A3B8" }}>{day.label}</div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: "#F8FAFC" }}>{day.focus}</div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontSize: 12, color: "#818CF8" }}>{day.studyHours} hrs</div>
+                <div style={{ fontSize: 11, color: "#64748B", textTransform: "uppercase", letterSpacing: "0.16em" }}>{day.dayType}</div>
+              </div>
+            </div>
+            <div style={{ fontSize: 11, color: "#94A3B8", marginBottom: 10 }}>{day.date}</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {day.tasks.slice(0, 4).map((task) => (
+                <div key={task.id} style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 12, color: "#E2E8F0" }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontWeight: 600 }}>{task.topic}</div>
+                    <div style={{ color: "#64748B" }}>{task.subject} • {task.chapter}</div>
+                  </div>
+                  <div style={{ color: "#94A3B8", flexShrink: 0 }}>{task.taskType} • {task.estimatedMinutes}m</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function AnalyticsRow({ dashboard }) {
@@ -748,9 +681,7 @@ function HeatmapAndDonut({ dashboard, subjectDistribution, heatmap }) {
   );
 }
 
-function SubjectCards() {
-  const { subjects, topics } = useRoadmap();
-
+function SubjectCards({ subjects, topics }) {
   const subjectProgress = calculateSubjectProgress(
     subjects,
     topics
@@ -773,9 +704,9 @@ function SubjectCards() {
                   </div>
                   <div style={{ fontSize: 11, color: "#64748B", marginBottom: 6 }}>{s.completed}/{s.total} topics</div>
                   <Bar2 pct={s.progress} color={color} h={4} />
-                  <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 6 }}>
+                  {/* <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 6 }}>
                     <button style={{ ...S.textBtn }}>Continue →</button>
-                  </div>
+                  </div> */}
                 </div>
               </div>
             </div>
@@ -988,8 +919,10 @@ const S = {
 // ─── Root ─────────────────────────────────────────────────────────────────────
 
 export default function Dashboard() {
-  const { topics, studySessions, dailyStudyHours, profile, subjects } = useRoadmap();
+  const { topics, studySessions, studyPlan, dailyStudyHours, profile, subjects, toggleComplete } = useRoadmap();
   const { progress, completedTopics, totalTopics } = calculateOverallProgress(topics);
+  const studyTarget = calculateStudyTarget(topics, profile.examDate, profile.minimumStudyHours);
+  const todayGoal = studyTarget.totalStudyHours;
   const streak = calculateStreak(studySessions);
   const todayStudied = calculateTodayStudied(studySessions);
   const analytics = getStudyAnalytics(studySessions, topics, 7);
@@ -1019,8 +952,10 @@ export default function Dashboard() {
     completedTopics,
     totalTopics,
     streak,
-    todayGoal: profile.dailyStudyHours,
+    todayGoal,
     todayStudied,
+    minimumStudyHours: studyTarget.minimumStudyHours,
+    syllabusRequiredHours: studyTarget.syllabusRequiredHours,
     examName: profile.exam || "JEE",
     examDaysLeft,
     aheadDays,
@@ -1033,22 +968,34 @@ export default function Dashboard() {
     xpNext,
     averageSessionDuration,
     resumeTopic,
+    studyWarning: studyTarget.warning,
   };
 
   return (
     <div style={S.page}>
       <Header />
-      <Hero dashboard={dashboard} />
+      <Hero
+        dashboard={dashboard}
+        topics={topics}
+        studySessions={studySessions}
+        toggleComplete={toggleComplete}
+      />
       {/* <ResumeCard /> */}
-      <TodaysPlan />
+      <TodaysPlan
+        subjects={subjects}
+        topics={topics}
+        dailyStudyHours={dailyStudyHours}
+        toggleComplete={toggleComplete}
+      />
+      <StudyPlanSection plan={studyPlan} />
       <AnalyticsRow dashboard={dashboard} />
       <StudyCharts analytics={analytics} />
       <HeatmapAndDonut dashboard={dashboard} subjectDistribution={subjectDistribution} heatmap={heatmap} />
-      <SubjectCards />
+      <SubjectCards subjects={subjects} topics={topics} />
       {/* <AICoach /> */}
       <RecentAndUpcoming recentActivity={recentActivity} upcoming={upcoming} />
-      <Achievements dashboard={dashboard} />
-      <FAB />
+      {/* <Achievements dashboard={dashboard} /> */}
+      {/* <FAB /> */}
     </div>
   );
 }

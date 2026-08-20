@@ -3,7 +3,9 @@ import { generateWithGroq } from "./groq";
 type RoadmapProfile = {
   exam: string;
   educationLevel: string;
-  dailyStudyHours: number;
+  examDate: string;
+  preparationLevel?: "easy" | "medium" | "hard";
+  minimumStudyHours?: number;
   additionalInfo?: string;
 };
 
