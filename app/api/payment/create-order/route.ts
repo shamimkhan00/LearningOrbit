@@ -9,6 +9,11 @@ const CASHFREE_API_VERSION = "2025-01-01";
 export async function POST(request: Request) {
     try {
         const authHeader = request.headers.get("authorization");
+        const requestUrl = new URL(request.url);
+        const forwardedHost = request.headers.get("x-forwarded-host");
+        const forwardedProto = request.headers.get("x-forwarded-proto");
+        const host = forwardedHost ?? requestUrl.host;
+        const protocol = forwardedProto ?? requestUrl.protocol.replace(":", "");
 
         if (!authHeader?.startsWith("Bearer ")) {
             return NextResponse.json(
@@ -23,6 +28,7 @@ export async function POST(request: Request) {
 
         const uid = decodedToken.uid;
         const email = decodedToken.email;
+        const phone = decodedToken.phone_number ?? "9999999999";
 
         if (!email) {
             return NextResponse.json(
@@ -50,11 +56,12 @@ export async function POST(request: Request) {
                 customer_details: {
                     customer_id: uid,
                     customer_email: email,
+                    customer_phone: phone,
                 },
 
                 order_meta: {
-                    return_url: `https://learnorbit.com/payment/success?order_id={order_id}`,
-                    notify_url: "https://learnorbit.com/api/payment/webhook",
+                    return_url: `${protocol}://${host}/payment/success?order_id={order_id}`,
+                    notify_url: `${protocol}://${host}/api/payment/webhook`,
                 },
 
                 order_tags: {
