@@ -31,6 +31,8 @@ export default function ProtectedLayout({
     let cancelled = false;
 
     async function checkSubscription() {
+      if (!user) return;
+
       try {
         const userRef = doc(db, "users", user.uid);
         const snapshot = await getDoc(userRef);
