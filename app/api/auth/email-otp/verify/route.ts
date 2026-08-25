@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 
 import { verifyEmailOtp } from "@/lib/email-otp-store";
 import { adminAuth } from "@/lib/firebase-admin";
+import { FieldValue } from "firebase-admin/firestore";
+import { adminDb } from "@/lib/firebase-admin";
 
 export const runtime = "nodejs";
 
@@ -86,6 +88,27 @@ export async function POST(request: Request) {
       email: normalizedEmail,
       password,
       emailVerified: true,
+    });
+
+    const now = new Date();
+    const trialEndsAt = new Date(
+      now.getTime() + 7 * 24 * 60 * 60 * 1000
+    );
+
+    await adminDb.collection("users").doc(userRecord.uid).set({
+      email: normalizedEmail,
+
+      plan: "trial",
+      subscriptionStatus: "trial",
+
+      trialStartedAt: FieldValue.serverTimestamp(),
+      trialEndsAt,
+
+      subscriptionStartedAt: null,
+      subscriptionEndsAt: null,
+
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
     });
 
     const customToken = await adminAuth.createCustomToken(userRecord.uid);

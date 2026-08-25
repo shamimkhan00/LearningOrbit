@@ -2,6 +2,7 @@ import "server-only";
 
 import { cert, getApp, getApps, initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
+import { getFirestore } from "firebase-admin/firestore";
 
 function getRequiredAdminEnv(name: string) {
   const value = process.env[name];
@@ -48,5 +49,6 @@ const adminApp = getApps().length
     });
 
 const adminAuth = getAuth(adminApp);
+const adminDb = getFirestore(adminApp);
 
-export { adminApp, adminAuth };
+export { adminApp, adminAuth, adminDb };
