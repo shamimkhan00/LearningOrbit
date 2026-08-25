@@ -31,6 +31,7 @@ export default function PaymentSuccessPage() {
       return;
     }
 
+    const safeOrderId = orderId;
     let cancelled = false;
     let attempts = 0;
 
@@ -39,8 +40,11 @@ export default function PaymentSuccessPage() {
         const user = auth.currentUser;
 
         if (!user) {
+          const redirectTarget = encodeURIComponent(
+            `/payment/success?order_id=${safeOrderId}`
+          );
           router.replace(
-            `/sign-in?redirect=/payment/success?order_id=${encodeURIComponent(orderId)}`
+            `/sign-in?redirect=${redirectTarget}`
           );
           return;
         }
