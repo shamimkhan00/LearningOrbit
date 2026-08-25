@@ -240,7 +240,6 @@ export default function PricingPage() {
             {[
               "Full LearningOrbit access",
               "Personalized study roadmap",
-              "AI-powered learning tools",
               "Progress tracking",
             ].map((feature) => (
               <div

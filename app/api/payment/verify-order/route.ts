@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase-admin";
+import { FieldValue } from "firebase-admin/firestore";
 
 export const runtime = "nodejs";
 
@@ -67,17 +68,47 @@ export async function POST(request: Request) {
     const userSnapshot = await userRef.get();
 
     const userData = userSnapshot.data();
+    const paymentSuccessful = order.order_status === "PAID";
+    const subscriptionEndsAt = userData?.subscriptionEndsAt?.toDate?.();
 
     const subscriptionActive =
       userData?.subscriptionStatus === "active" &&
-      userData?.subscriptionEndsAt?.toDate?.() > new Date();
+      subscriptionEndsAt &&
+      subscriptionEndsAt > new Date();
+
+    if (paymentSuccessful && !subscriptionActive) {
+      const now = new Date();
+      const nextSubscriptionEndsAt = new Date(
+        now.getTime() + 30 * 24 * 60 * 60 * 1000,
+      );
+
+      await userRef.set(
+        {
+          plan: "monthly",
+          subscriptionStatus: "active",
+          subscriptionStartedAt: FieldValue.serverTimestamp(),
+          subscriptionEndsAt: nextSubscriptionEndsAt,
+          updatedAt: FieldValue.serverTimestamp(),
+          paymentProvider: "cashfree",
+          paymentOrderId: orderId,
+        },
+        { merge: true },
+      );
+
+      return NextResponse.json({
+        orderStatus: order.order_status,
+        paymentSuccessful: true,
+        subscriptionActive: true,
+        subscriptionEndsAt: nextSubscriptionEndsAt.toISOString(),
+      });
+    }
 
     return NextResponse.json({
       orderStatus: order.order_status,
-      paymentSuccessful: order.order_status === "PAID",
+      paymentSuccessful,
       subscriptionActive,
       subscriptionEndsAt:
-        userData?.subscriptionEndsAt?.toDate?.()?.toISOString() ?? null,
+        subscriptionEndsAt?.toISOString() ?? null,
     });
   } catch (error) {
     console.error("Verify order error:", error);

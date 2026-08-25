@@ -13,6 +13,9 @@ type PaymentState =
   | "failed"
   | "error";
 
+const POLL_INTERVAL_MS = 1500;
+const MAX_POLLS = 12;
+
 export default function PaymentSuccessPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -32,8 +35,23 @@ export default function PaymentSuccessPage() {
     }
 
     const safeOrderId = orderId;
+    const timers: ReturnType<typeof setTimeout>[] = [];
     let cancelled = false;
     let attempts = 0;
+
+    const schedule = (callback: () => void, delay: number) => {
+      const timer = setTimeout(callback, delay);
+      timers.push(timer);
+    };
+
+    const stopWithState = (
+      nextState: PaymentState,
+      nextMessage: string,
+    ) => {
+      if (cancelled) return;
+      setState(nextState);
+      setMessage(nextMessage);
+    };
 
     async function verifyPayment() {
       try {
@@ -43,9 +61,7 @@ export default function PaymentSuccessPage() {
           const redirectTarget = encodeURIComponent(
             `/payment/success?order_id=${safeOrderId}`
           );
-          router.replace(
-            `/sign-in?redirect=${redirectTarget}`
-          );
+          router.replace(`/sign-in?redirect=${redirectTarget}`);
           return;
         }
 
@@ -77,59 +93,64 @@ export default function PaymentSuccessPage() {
           setState("success");
           setMessage("Your LearningOrbit subscription is now active.");
 
-          setTimeout(() => {
+          schedule(() => {
             router.replace("/dashboard");
           }, 1800);
 
           return;
         }
 
+        const isTerminalFailure =
+          data.orderStatus === "FAILED" ||
+          data.orderStatus === "CANCELLED" ||
+          data.orderStatus === "EXPIRED" ||
+          data.orderStatus === "USER_DROPPED" ||
+          data.orderStatus === "NOT_ATTEMPTED";
+
+        if (isTerminalFailure) {
+          stopWithState(
+            "failed",
+            "The payment was not completed. If money was deducted, it should be refunded automatically by Cashfree.",
+          );
+          return;
+        }
+
         /*
-         * Cashfree may confirm the payment before
-         * our webhook finishes updating Firebase.
-         *
-         * Give the webhook a few seconds to process.
+         * Cashfree may confirm the payment before Firebase state is fully updated.
+         * Keep polling for a short window, then fall back to a clear processing state.
          */
-        if (
-          data.paymentSuccessful &&
-          attempts < 10
-        ) {
+        if (data.paymentSuccessful && attempts < MAX_POLLS) {
           attempts += 1;
 
-          setState("processing");
-          setMessage(
+          stopWithState(
+            "processing",
             "Payment received. Activating your LearningOrbit access..."
           );
 
-          setTimeout(verifyPayment, 1500);
+          schedule(verifyPayment, POLL_INTERVAL_MS);
 
           return;
         }
 
         if (data.paymentSuccessful) {
-          setState("processing");
-          setMessage(
-            "Payment received. Your subscription is being activated. Please wait a moment."
+          stopWithState(
+            "processing",
+            "Payment received. Your subscription is being activated. Please refresh in a few seconds if this screen stays here."
           );
+          return;
+        }
+
+        if (data.orderStatus === "ACTIVE" && attempts < MAX_POLLS) {
+          attempts += 1;
+          stopWithState("processing", "Waiting for payment confirmation...");
+          schedule(verifyPayment, POLL_INTERVAL_MS);
 
           return;
         }
 
-        if (data.orderStatus === "ACTIVE") {
-          setState("processing");
-          setMessage("Waiting for payment confirmation...");
-
-          if (attempts < 10) {
-            attempts += 1;
-            setTimeout(verifyPayment, 1500);
-          }
-
-          return;
-        }
-
-        setState("failed");
-        setMessage(
-          "The payment was not completed."
+        stopWithState(
+          "processing",
+          "We are still waiting for Cashfree to confirm the payment. Please keep this page open for a moment.",
         );
       } catch (error) {
         console.error("Payment verification error:", error);
@@ -149,6 +170,7 @@ export default function PaymentSuccessPage() {
 
     return () => {
       cancelled = true;
+      timers.forEach(clearTimeout);
     };
   }, [orderId, router]);
 
@@ -295,24 +317,40 @@ export default function PaymentSuccessPage() {
         )}
 
         {(state === "failed" || state === "error") && (
-          <button
-            onClick={() => router.replace("/pricing")}
-            style={{
-              marginTop: "1.5rem",
-              width: "100%",
-              padding: "0.85rem",
-              border: "none",
-              borderRadius: "10px",
-              background:
-                "linear-gradient(135deg,#6366F1,#8B5CF6)",
-              color: "#fff",
-              fontWeight: 700,
-              fontSize: "0.9rem",
-              cursor: "pointer",
-            }}
-          >
-            Back to pricing
-          </button>
+          <div style={{ display: "flex", gap: "0.75rem", marginTop: "1.5rem" }}>
+            <button
+              onClick={() => router.replace("/pricing")}
+              style={{
+                flex: 1,
+                padding: "0.85rem",
+                border: "none",
+                borderRadius: "10px",
+                background: "linear-gradient(135deg,#6366F1,#8B5CF6)",
+                color: "#fff",
+                fontWeight: 700,
+                fontSize: "0.9rem",
+                cursor: "pointer",
+              }}
+            >
+              Back to pricing
+            </button>
+            <button
+              onClick={() => router.refresh()}
+              style={{
+                flex: 1,
+                padding: "0.85rem",
+                borderRadius: "10px",
+                border: "1px solid rgba(99,102,241,0.35)",
+                background: "rgba(99,102,241,0.08)",
+                color: "#A78BFA",
+                fontWeight: 700,
+                fontSize: "0.9rem",
+                cursor: "pointer",
+              }}
+            >
+              Retry
+            </button>
+          </div>
         )}
       </div>
 

@@ -1,7 +1,7 @@
 "use client";
 
 import Image from 'next/image';
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   LineChart, Line, BarChart, Bar,
   XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -299,14 +299,20 @@ function Hero({ dashboard, topics, studySessions, toggleComplete }) {
     studyWarning,
   } = dashboard;
   const goalPct = Math.round((todayStudied / Math.max(todayGoal, 1)) * 100);
-  const today = new Date().getDate();
-  const message = MOTIVATIONS[today % MOTIVATIONS.length];
+  const [greeting, setGreeting] = useState("Hello 👋");
+  const [message, setMessage] = useState(MOTIVATIONS[0]);
+
+  useEffect(() => {
+    setGreeting(getGreeting());
+    setMessage(MOTIVATIONS[new Date().getDate() % MOTIVATIONS.length]);
+  }, []);
+
   const deltaLabel = performanceDelta >= 0 ? `↑ +${performanceDelta}%` : `↓ ${performanceDelta}%`;
   return (
     <div style={{ padding: "20px 16px 0" }}>
       {/* Greeting */}
       <div style={{ marginBottom: 16 }}>
-        <p style={{ margin: 0, fontSize: 13, color: "#94A3B8" }}>{getGreeting()}</p>
+        <p style={{ margin: 0, fontSize: 13, color: "#94A3B8" }}>{greeting}</p>
         <h1 style={{ margin: "2px 0 4px", fontSize: 18, fontWeight: 700, color: "#F1F5F9" }}>{message}</h1>
         <p style={{ margin: 0, fontSize: 13, color: "#818CF8" }}>Push Past Your Limits</p>
       </div>
