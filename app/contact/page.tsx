@@ -15,8 +15,8 @@ export default function ContactPage() {
         </svg>
       ),
       label: "Email",
-      value: "tutorai.official.dev@gmail.com",
-      href: "mailto:tutorai.official.dev@gmail.com",
+      value: "support@learningorbit.in",
+      href: "mailto:support@learningorbit.in",
       description: "Best for general queries, support, and feedback. We aim to reply within 24 hours.",
     },
     {
@@ -313,7 +313,7 @@ export default function ContactPage() {
             LearningOrbit is a passion project aimed at making quality exam prep accessible to every student in India. Your feedback genuinely shapes the platform.
           </p>
           <a
-            href="mailto:tutorai.official.dev@gmail.com"
+            href="mailto:support@learningorbit.in"
             style={{
               display: "inline-block",
               background: "linear-gradient(135deg, #6366F1, #8B5CF6)",

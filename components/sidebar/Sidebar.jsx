@@ -2,22 +2,35 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { Map, Settings, LogOut, X } from 'lucide-react';
-import { useState } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
+import { Map, Settings, Mail , LogOut, X } from 'lucide-react';
+import { signOut } from 'firebase/auth';
+import { auth } from '@/lib/firebase';
 
 const navItems = [
   { name: 'Roadmap', href: '/roadmap', icon: Map },
   { name: 'Setup', href: '/setup', icon: Settings },
+  { name: 'Contact Us', href: '/contact', icon: Mail },
 ];
 
 export default function Sidebar({ isSidebarOpen, setIsSidebarOpen }) {
   const pathname = usePathname();
-  const [slideon, setSlideon] = useState(true);
+  const router = useRouter();
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      setIsSidebarOpen(false);
+      router.replace("/");
+    } catch (error) {
+      console.error("Logout failed:", error);
+    }
+  };
+
   if (!isSidebarOpen) return null;
+
   return (
-    
-    <aside className="fixed top-0 right-0 z-50 w-64 h-screen bg-[#0F172A] border-l border-[#1E293B] flex flex-col shadow-2xl">
+    <aside className="fixed top-0 right-0 z-50 w-64 h-[100dvh] bg-[#0F172A] border-l border-[#1E293B] flex flex-col shadow-2xl">
       {/* Header & Close Button */}
       <div className="p-6 flex items-center justify-between border-b border-[#1E293B]">
         {/* <div className="flex items-center gap-3">
@@ -31,19 +44,17 @@ export default function Sidebar({ isSidebarOpen, setIsSidebarOpen }) {
         </div> */}
 
         {/* Close Button */}
-        {isSidebarOpen && (
-          <button
-            onClick={() => setIsSidebarOpen(false)}
-            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-[#1E293B] transition-colors"
-            aria-label="Close Sidebar"
-          >
-            <X size={20} />
-          </button>
-        )}
+        <button
+          onClick={() => setIsSidebarOpen(false)}
+          className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-[#1E293B] transition-colors"
+          aria-label="Close Sidebar"
+        >
+          <X size={20} />
+        </button>
       </div>
 
-      {/* Navigation Links */}
-      <nav className="flex-1 px-4 py-6 space-y-2">
+      {/* Navigation Links - Scrollable */}
+      <nav className="flex-1 min-h-0 overflow-y-auto px-4 py-6 space-y-2">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = pathname === item.href;
@@ -52,7 +63,7 @@ export default function Sidebar({ isSidebarOpen, setIsSidebarOpen }) {
             <Link
               key={item.href}
               href={item.href}
-              // onClick={onClose}
+              onClick={() => setIsSidebarOpen(false)}
               className={`group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
                 isActive
                   ? 'bg-[#1E293B] text-[#F8FAFC] border border-[#6366F1]'
@@ -74,7 +85,7 @@ export default function Sidebar({ isSidebarOpen, setIsSidebarOpen }) {
       {/* Logout Button */}
       <div className="p-4 border-t border-[#1E293B]">
         <button
-          // onClick={onClose}
+          onClick={handleLogout}
           className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-[#E2E8F0] hover:bg-red-500/10 hover:text-red-400 transition-all duration-200"
         >
           <LogOut size={20} />

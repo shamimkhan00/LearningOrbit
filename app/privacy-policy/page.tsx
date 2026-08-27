@@ -220,10 +220,10 @@ export default function PrivacyPage() {
           <p style={{ color: "#94A3B8", lineHeight: 1.7, margin: 0, fontSize: "15px" }}>
             LearningOrbit is committed to protecting your privacy. This policy explains exactly what data we collect, why we collect it, and how it's used — in plain language. If you have questions, reach out at{" "}
             <a
-              href="mailto:tutorai.official.dev@gmail.com"
+              href="mailto:support@learningorbit.in"
               style={{ color: "#A78BFA", textDecoration: "none" }}
             >
-              tutorai.official.dev@gmail.com
+              support@learningorbit.in
             </a>
             .
           </p>
@@ -297,7 +297,7 @@ export default function PrivacyPage() {
         >
           <p style={{ color: "#94A3B8", fontSize: "15px", margin: "0 0 8px" }}>Questions about this policy?</p>
           <a
-            href="mailto:tutorai.official.dev@gmail.com"
+            href="mailto:support@learningorbit.in"
             style={{
               color: "#A78BFA",
               fontSize: "16px",
@@ -305,7 +305,7 @@ export default function PrivacyPage() {
               textDecoration: "none",
             }}
           >
-            tutorai.official.dev@gmail.com
+            support@learningorbit.in
           </a>
         </div>
       </div>

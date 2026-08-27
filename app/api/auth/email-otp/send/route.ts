@@ -27,10 +27,9 @@ export async function POST(request: Request) {
       expiresInMinutes,
     });
   } catch (error) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : "Unable to send OTP email right now.";
+    const message = error instanceof Error
+      ? error.message
+      : "Unable to send OTP email right now.";
 
     return NextResponse.json({ message }, { status: 500 });
   }

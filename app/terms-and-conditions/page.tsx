@@ -34,7 +34,7 @@ export default function TermsPage() {
           <rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0110 0v4" />
         </svg>
       ),
-      content: "You are responsible for maintaining the confidentiality of your login credentials and for all activity that occurs under your account. LearningOrbit is not liable for any loss resulting from unauthorised access to your account. Please notify us immediately at tutorai.official.dev@gmail.com if you suspect any unauthorised use.",
+      content: "You are responsible for maintaining the confidentiality of your login credentials and for all activity that occurs under your account. LearningOrbit is not liable for any loss resulting from unauthorised access to your account. Please notify us immediately at support@learningorbit.in if you suspect any unauthorised use.",
     },
     {
       title: "Use of the Platform",
@@ -252,10 +252,10 @@ export default function TermsPage() {
             Questions about these terms?
           </p>
           <a
-            href="mailto:tutorai.official.dev@gmail.com"
+            href="mailto:support@learningorbit.in"
             style={{ color: "#A78BFA", fontSize: "16px", fontWeight: 600, textDecoration: "none" }}
           >
-            tutorai.official.dev@gmail.com
+            support@learningorbit.in
           </a>
         </div>
       </div>

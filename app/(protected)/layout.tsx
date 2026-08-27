@@ -18,6 +18,7 @@ export default function ProtectedLayout({
 
   const [checkingAccess, setCheckingAccess] = useState(true);
   const [hasAccess, setHasAccess] = useState(false);
+  const [accessError, setAccessError] = useState("");
 
   useEffect(() => {
     if (loading) return;
@@ -56,7 +57,9 @@ export default function ProtectedLayout({
         console.error("Subscription check failed:", error);
 
         if (!cancelled) {
-          router.replace("/pricing");
+          setAccessError(
+            "We could not verify your subscription right now. Please check your connection and try again.",
+          );
         }
       } finally {
         if (!cancelled) {
@@ -76,8 +79,42 @@ export default function ProtectedLayout({
     return <div>Loading...</div>;
   }
 
-  if (!user || !hasAccess) {
+  if (!user || (!hasAccess && !accessError)) {
     return null;
+  }
+
+  if (accessError) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "24px",
+          textAlign: "center",
+        }}
+      >
+        <div style={{ maxWidth: 520 }}>
+          <h1 style={{ marginBottom: 12 }}>Subscription check paused</h1>
+          <p style={{ marginBottom: 20 }}>{accessError}</p>
+          <button
+            onClick={() => window.location.reload()}
+            style={{
+              padding: "12px 18px",
+              borderRadius: 10,
+              border: "none",
+              cursor: "pointer",
+              background: "linear-gradient(135deg,#6366F1,#8B5CF6)",
+              color: "#fff",
+              fontWeight: 700,
+            }}
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return children;
