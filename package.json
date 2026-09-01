@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@cashfreepayments/cashfree-js": "^1.0.7",
+    "@vercel/analytics": "^2.0.1",
     "cashfree-pg": "^6.0.5",
     "firebase": "^12.12.0",
     "firebase-admin": "^13.8.0",
